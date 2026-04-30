@@ -820,7 +820,7 @@ Only if Phase 4 user feedback demands cross-process active-profile propagation t
 2. Begin with **Phase 0**. Do not skip the spike. Surprises found later are 10× more expensive. Phase 0 must produce `docs/spike-results.md` with one line per check in §14, marked `verified` / `disconfirmed` / `inconclusive`.
 3. If a Phase 0 check disconfirms an assumption in §7, open a PR that updates this document _before_ writing any adapter code. The doc is the source of truth; never let code drift ahead of it.
 4. Implement crates in dependency order: `maru-core` → `maru-store` → `maru-adapters` → `maru-activation` → `maru-cli` and `maru-shim` in parallel.
-5. At every phase boundary, open a PR with the phase tag in the title and pause for human review before continuing.
+5. At every phase boundary, invoke `/cut-phase N`, which opens a PR and enables GitHub auto-merge. The PR lands on `main` automatically when CI is green. (See [docs/decisions/0002-autonomous-implementation-mode.md](docs/decisions/0002-autonomous-implementation-mode.md) for the rationale; revertible by reverting the permissions and skill changes documented there.)
 6. When the spec is silent or ambiguous, choose the option that best preserves: (a) shim performance, (b) testability of `maru-core`, (c) cross-platform behavior, (d) credential isolation. In that order.
 7. Do not introduce dependencies not listed in §13 without justification in the PR description.
 8. Keep `docs/` updated as you go, not at the end. A feature without docs is not done. `docs/limitations.md` is a first-class artifact, not an afterthought.

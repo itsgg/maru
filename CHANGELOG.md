@@ -19,3 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Notes
 
 - No releases yet. First tag will be `phase-1-complete` per GENESIS §14.
+- Autonomous implementation mode: `/loop /autopilot` runs phases end-to-end with auto-merge. See [ADR 0002](docs/decisions/0002-autonomous-implementation-mode.md) and [docs/notes/handoff.md](docs/notes/handoff.md).

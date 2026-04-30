@@ -8,7 +8,8 @@ This file is your operating manual. Read [GENESIS.md](./GENESIS.md) first — it
 - Edition 2024. MSRV pinned in `Cargo.toml` (`workspace.package.rust-version`).
 - Toolchain pinned in `rust-toolchain.toml` (`channel = "1.95.0"`).
 - No async, no `tokio`, no networking. The forbidden list in GENESIS §13 is enforced.
-- Phase-driven (see GENESIS §14). Do not start a phase until the previous one is signed off.
+- Phase-driven (see GENESIS §14). Phase boundaries auto-merge on green CI; see [ADR 0002](docs/decisions/0002-autonomous-implementation-mode.md).
+- Operator runbook: [`docs/notes/handoff.md`](docs/notes/handoff.md).
 
 ## Commands
 

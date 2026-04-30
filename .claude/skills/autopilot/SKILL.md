@@ -1,26 +1,37 @@
 ---
 name: autopilot
-description: Autonomously implement the current GENESIS phase one task at a time, with real validation. Picks the next TODO, implements it, runs the local gate, and commits. Compose with /loop for hands-off continuous execution. Use when the user says "keep going", "auto-implement", "drive phase N to completion", or invokes /autopilot directly.
-argument-hint: [--bootstrap | --status | --issues | <task-id>]
+description: Autonomously implement maru phase-by-phase. Picks the next TODO, implements it, runs the full local gate, commits, pushes via PR with auto-merge, and rolls into the next phase. Compose with /loop /autopilot for hands-off execution; halts only on real problems. Use when the user says "keep going", "auto-implement", "autonomous mode", or invokes /autopilot directly.
+argument-hint: [--bootstrap | --status | <task-id>]
 disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent
+allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, ScheduleWakeup
 ---
 
-# /autopilot — phase-driven implementation loop
+# /autopilot — autonomous phase-to-phase implementation
 
-Drives implementation of the current GENESIS phase autonomously. **Each invocation completes ONE task** and ends in either a clean commit or a halt with a written reason. Compose with `/loop /autopilot` for continuous self-paced execution; the loop terminates naturally when autopilot halts.
+Drives implementation across every GENESIS phase autonomously. **Each invocation completes ONE atomic step** (one task implementation, one PR-state poll, or one phase transition) and either rolls into the next via `/loop` or halts with a written reason.
 
-This is intentionally conservative: it never bypasses the local gate, never commits failing code, and never starts work on a dirty tree. Real validation, not vibes.
+This is conservative by construction: it never bypasses the local gate, never commits failing code, never pushes a non-fast-forward, never merges a red PR. Real validation, not vibes.
 
 ## Modes
 
 | Invocation                | What it does                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------------- |
 | `/autopilot --bootstrap`  | Generate or refresh `TODO.md` for the current phase from GENESIS §14. Idempotent.           |
-| `/autopilot --status`     | Print phase, % done, next task, last commit, halt state. No work performed.                 |
-| `/autopilot --issues`     | Mirror unchecked TODOs to GitHub issues via `gh` (requires `gh auth status` clean + remote). |
+| `/autopilot --status`     | Print phase, % done, branch, PR state, halt state. No work performed.                       |
 | `/autopilot <task-id>`    | Execute a specific task by ID (e.g., `1.3`). Bypasses the picker.                            |
-| `/autopilot` (no args)    | Pick the next eligible task from `TODO.md` and execute it.                                  |
+| `/autopilot` (no args)    | Pick the next eligible step and execute it. This is what `/loop` fires.                    |
+
+## State machine
+
+Each invocation reads the world and dispatches to one of these states:
+
+1. **`needs-bootstrap`** — `TODO.md` is missing or stale (phase tag advanced since generation). → run bootstrap, exit.
+2. **`pr-pending`** — an open PR exists for the current phase branch. → poll its state (see "PR polling" below), exit.
+3. **`phase-complete-uncut`** — all phase TODOs checked, no open PR yet. → invoke `/cut-phase N`, exit.
+4. **`phase-cut-merged`** — PR for previous phase is MERGED. → checkout main, pull, branch for next phase, exit (next `/loop` fire picks the next task).
+5. **`task-ready`** — branch + clean tree + an unchecked, dependency-satisfied task. → execute that task end-to-end, exit.
+6. **`all-phases-complete`** — Phase 4 PR merged, no further phases. → halt with reason `all-phases-complete` (the happy terminal state).
+7. **`halt`** — any of the halt categories below. → write halt note, exit.
 
 ## Bootstrap
 
@@ -44,29 +55,21 @@ This is intentionally conservative: it never bypasses the local gate, never comm
 
 5. Existing checked items (`- [x]`) are preserved verbatim. Only unchecked items get refreshed when GENESIS changes.
 
-## Status
+## Per-phase branching
 
-```
-phase:        <N> — <title>
-done:         <m>/<n> tasks (<pct>%)
-next:         [{id}] {title}
-last commit:  {sha} {subject}
-halt:         <one-line reason, or "none">
-```
+Branch names follow GENESIS §17: `phase-{N}-implementation` (or `phase-{N}-spike` for Phase 0).
 
-Single block, no work performed.
+- **Starting a phase:** `git checkout main && git pull --ff-only && git checkout -b phase-{N}-implementation`.
+- **Working on a phase:** stay on the phase branch. Every commit lands here.
+- **Completing a phase:** `/cut-phase {N}` pushes the branch, opens a PR with `--label auto-merge`, and enables auto-merge. autopilot then enters `pr-pending` state.
+- **Phase rolled forward:** when the PR is MERGED, autopilot checks out main, pulls, and branches the next phase.
 
-## Issue mirroring
-
-`/autopilot --issues` opens one GitHub issue per unchecked TODO using `gh issue create`. Each issue body links back to the TODO ID and the GENESIS section. Closed issues are reflected back into TODO.md as `[x]` with the issue number on the next run. Skipped silently if `gh` is missing or unauthed.
-
-## Single-task execution
-
-This is the default mode. The full procedure for one task:
+## Single-task execution (state 5)
 
 ### 1. Pre-flight gate (refuse if any check fails)
 
 - Working tree clean: `git status --porcelain` is empty.
+- On the correct phase branch (`phase-{N}-implementation`). If on `main`, switch.
 - No prior task is `[BLOCKED]` in `TODO.md` without a resolution commit since.
 - A halt note in `docs/notes/autopilot-halt-*.md` newer than the last commit means the user must clear it manually before resuming.
 
@@ -76,7 +79,7 @@ If any pre-flight check fails: print the reason, do not pick a task, exit.
 
 - If `<task-id>` was given, use it.
 - Otherwise: first unchecked, dependency-clean TODO in file order.
-- If none eligible (everything depends on a not-yet-done task), halt with reason `dependency cycle or all blocked`.
+- If none eligible (everything depends on a not-yet-done task), halt with reason `dependency-cycle`.
 
 ### 3. Read context
 
@@ -105,7 +108,7 @@ cargo machete
 
 Plus task-specific:
 
-- **Phase 0 spike tasks:** verify `docs/spike-results.md` contains a new entry whose ID matches the task. If outcome is `disconfirmed`, halt with reason `phase-0 disconfirmation requires GENESIS update first` and write a halt note pointing to the disconfirmed assumption.
+- **Phase 0 spike tasks:** verify `docs/spike-results.md` contains a new entry whose ID matches the task. If outcome is `disconfirmed`, halt with reason `phase-0-disconfirmation` and write a halt note pointing to the disconfirmed assumption.
 - **§6 type tasks:** `cargo doc --workspace --no-deps` plus a grep that the type appears with the documented signature.
 - **Adapter tasks:** invoke the `genesis-validator` subagent. Require `READY` verdict; `READY-WITH-NOTES` is allowed but the notes go into the commit message; `BLOCKED` triggers halt.
 
@@ -121,16 +124,39 @@ If any gate fails: try to fix it. **Maximum 3 fix attempts per gate.** After 3, 
 GENESIS: §<section>
 ```
 
-Type follows Conventional Commits. Scope is the crate name when applicable. The `[task <id>]` suffix lets `--bootstrap` reconcile state.
+Type follows Conventional Commits. Scope is the crate name when applicable.
 
 ### 7. Update TODO.md
 
-Mark the item `- [x]` and append the commit SHA. If the task spawned new follow-ups (e.g., a dep needs to be added in another crate), add them as new TODOs with `depends-on: <this-id>`.
+Mark the item `- [x]` and append the commit SHA. If the task spawned new follow-ups, add them with `depends-on: <this-id>`.
 
-### 8. Decide next
+### 8. Push the commit
 
-- If all tasks for the current phase are checked AND all phase exit criteria from GENESIS §14 are met: invoke `/cut-phase <N>` and HALT (`phase complete`).
-- Otherwise: print one-line summary and exit (so `/loop` can re-fire cleanly).
+`git push origin phase-{N}-implementation`. This is allowed by permissions; the PreToolUse hook still blocks pushes to main and force-pushes.
+
+### 9. Decide next state
+
+- All phase TODOs checked AND all phase exit criteria met → state `phase-complete-uncut` (next `/loop` fire invokes `/cut-phase`).
+- Otherwise → state `task-ready` again on next fire.
+
+## PR polling (state 2)
+
+When an open PR exists for the current phase branch:
+
+```sh
+state=$(gh pr view --json state,mergeable,mergeStateStatus,statusCheckRollup --jq '.')
+```
+
+Decision tree:
+
+- **MERGED** → state `phase-cut-merged`. Checkout main, pull, branch next phase, exit. Next `/loop` fire begins next phase.
+- **CLOSED** (without merge) → halt with reason `pr-closed-unmerged` and write a halt note with the PR URL.
+- **OPEN, mergeable=MERGEABLE, all checks PASS** → `gh pr merge <num> --squash --auto` (idempotent if already enabled), exit and let auto-merge complete.
+- **OPEN, checks PENDING/QUEUED** → `ScheduleWakeup` for **300 seconds** with reason `"polling phase-{N} PR CI"`, exit.
+- **OPEN, checks FAILURE** → halt with reason `pr-ci-failure` and the failing check name.
+- **OPEN, conflicts (mergeable=CONFLICTING)** → halt with reason `pr-conflict-needs-rebase`.
+
+Hard cap: if a PR has been polling for **>3 hours** of cumulative wakeups without merging, halt with reason `pr-stuck`.
 
 ## Halt conditions
 
@@ -140,30 +166,46 @@ When halting for any reason, write `docs/notes/autopilot-halt-<ISO-date>.md`:
 # Autopilot halt — <ISO date>
 
 - **Phase:** <N>
-- **Task:** <id> — <title>
+- **Branch:** <branch>
+- **Step:** <state machine state>
+- **Task:** <id> — <title>  (if applicable)
 - **Reason:** <category>
 - **Detail:** <multi-line context, what was tried, last error, next step for human>
+- **PR:** <url if applicable>
 ```
 
-Halt categories:
+Halt categories (the only legitimate stops):
 
-- `dirty-tree` — pre-flight failed.
+- `dirty-tree` — pre-flight failed; manual cleanup needed.
 - `gate-failure` — local gate failed 3× on a single check.
 - `genesis-validator-blocked` — the validator returned `BLOCKED`.
-- `phase-0-disconfirmation` — a Phase 0 check disconfirmed an assumption; GENESIS must change first.
-- `dependency-not-met` — every unchecked TODO depends on something not done.
+- `phase-0-disconfirmation` — a Phase 0 check disconfirmed an assumption; GENESIS must change first (operating instruction §3).
+- `dependency-cycle` — every unchecked TODO depends on something not done.
 - `dep-budget-violation` — implementation needs a dep outside GENESIS §13.
 - `out-of-scope` — task as written can't be done without changes the parent didn't authorize.
-- `phase-complete` — happy path; no more work in this phase.
+- `pr-ci-failure` — auto-merge PR's CI is red.
+- `pr-conflict-needs-rebase` — main moved; PR needs rebase.
+- `pr-closed-unmerged` — someone closed the PR without merging.
+- `pr-stuck` — PR open >3h without merge.
+- `all-phases-complete` — happy path; nothing left to do.
 
 ## Output per iteration
 
 Single short status block. Examples:
 
 ```
-[1.3] feat(maru-core): add HarnessAdapter trait — committed 6e8a4f2
+[1.3] feat(maru-core): add HarnessAdapter trait — committed 6e8a4f2, pushed
 gate: 6/6 PASS
 next: [1.4] add ActivationPlan
+```
+
+```
+[PR-PENDING] phase-1 PR #14 — checks PENDING (3/8). Sleeping 5min.
+```
+
+```
+[PHASE-COMPLETE] Phase 1 PR #14 MERGED at 2026-04-30T18:42Z.
+syncing main, branching phase-2-implementation.
 ```
 
 ```
@@ -172,19 +214,23 @@ last error: error: type `Foo` is private (E0603) at crates/maru-core/src/lib.rs:
 note: docs/notes/autopilot-halt-2026-04-30.md
 ```
 
+```
+[HALT] all-phases-complete — Phase 4 PR #29 merged. maru is shipped.
+```
+
 ## Composition with `/loop`
 
 ```sh
-/loop /autopilot          # self-paced: model decides delay between iterations
-/loop 5m /autopilot       # fixed-interval, useful when waiting on an upstream
+/loop /autopilot          # self-paced: ScheduleWakeup picks delays based on state
+/loop 5m /autopilot       # fixed-interval (rarely needed; self-paced is better)
 ```
 
-The loop terminates when autopilot halts. Use `--status` between sessions to see what state the loop left things in.
+The loop terminates the moment autopilot halts. Use `--status` between sessions to see the state.
 
 ## Boundaries
 
-- **Don't push.** Autopilot creates commits locally; pushing is a deliberate human (or `/cut-phase`) action.
-- **Don't open PRs.** That's `/cut-phase`'s job.
-- **Don't modify GENESIS.md.** Spec changes are deliberate, not autopilot fodder.
+- **Don't push to main directly.** Always work on a phase branch; let auto-merge land it.
 - **Don't disable lints, gates, or hooks** to make a task pass. Halt instead.
-- **Don't keep going past a halt.** Halts are how the user stays in the loop.
+- **Don't keep going past a halt.** Halts are the user's seat at the table.
+- **Don't modify GENESIS.md.** Spec changes are deliberate, not autopilot fodder. A `phase-0-disconfirmation` halt produces a halt note describing what GENESIS section needs updating; the human writes the spec PR.
+- **Don't approve, comment, or close PRs other than the one autopilot just opened.**

@@ -1,0 +1,8 @@
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+default: true
+MD013: false             # line-length: rustfmt-style 100ch is fine; prose has its own limits
+MD033: false             # allow inline HTML (used in tables, details/summary)
+MD036: false             # emphasis-as-heading allowed; we use it for inline asides
+MD041: false             # first-line-h1 not required (CHANGELOG, READMEs with badges, etc.)
+MD024:
+  siblings_only: true    # allow duplicate ### Added / ### Fixed across CHANGELOG sections

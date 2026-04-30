@@ -1,8 +1,25 @@
 # lefthook config. Install: `brew install lefthook && lefthook install`.
 # https://lefthook.dev
+#
+# Philosophy: pre-commit hooks should be FAST (≤ a few seconds). Slow hooks
+# get bypassed with `--no-verify`, then never run. Tokio, axum, ripgrep, and
+# cargo itself ship zero local hooks for this reason — they trust CI as the
+# real gate.
+#
+# Our split:
+# - pre-commit: only what runs in single-digit seconds on the staged subset
+#   (fmt --check, clippy on the whole workspace because Rust's per-file model
+#   makes targeted linting expensive, typos, deny). Targeted via {staged_files}
+#   where it makes sense.
+# - pre-push: slower-but-still-bounded checks (test, machete).
+# - commit-msg: cheap regex gate for Conventional Commits.
+#
+# We deliberately do NOT run `cargo nextest` pre-commit. CI is the source of
+# truth for tests. If you want a one-shot local check before pushing, run
+# `/check` in Claude Code or the gate snippet from CLAUDE.md.
+
 min_version: 1.13.0
 
-# Pre-commit: fast checks (≈ seconds). Don't block on tests here.
 pre-commit:
   parallel: true
   commands:
@@ -13,12 +30,14 @@ pre-commit:
       glob: "*.{rs,toml}"
       run: cargo clippy --workspace --all-targets --all-features -- -D warnings
     typos:
-      run: typos
+      run: typos {staged_files}
     deny:
       glob: "{Cargo.toml,Cargo.lock,deny.toml}"
       run: cargo deny --all-features check
+    markdown:
+      glob: "*.md"
+      run: prettier --check {staged_files}
 
-# Pre-push: slower checks. Tests + unused-deps audit.
 pre-push:
   parallel: true
   commands:
@@ -27,8 +46,6 @@ pre-push:
     machete:
       run: cargo machete
 
-# Commit-msg: minimal Conventional Commits gate (no Node, no commitlint).
-# If you outgrow grep, swap in `npx commitlint --edit {1}`.
 commit-msg:
   commands:
     conventional:

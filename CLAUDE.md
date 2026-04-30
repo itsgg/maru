@@ -85,16 +85,44 @@ cargo deny check && typos && cargo machete
 6. **A feature without docs is not done.** Update `docs/` in the same PR.
 7. **The carve-outs in GENESIS §7.1 are upstream bugs, not maru bugs.** When upstream fixes one, delete the corresponding `doctor` warning, the test asserting it, and the row in §7.1 — in that order — in the same PR.
 
-## Useful skills
+## Implementation workflow
 
-- `/spike` — guided Phase 0 verification runner. Updates `docs/spike-results.md`.
-- `/genesis-check` — diff current code against GENESIS.md and report drift.
-- `/cut-phase <N>` — phase-completion commit + tag + PR scaffold.
+A non-trivial change runs through this loop. Skip steps only when the work is genuinely trivial.
 
-## Useful subagents
+1. **`/research <topic>`** — only if GENESIS is silent or the question is genuinely open. Skip for spec-clear work.
+2. **Spec or ADR** — if the change introduces a cross-cutting pattern, copy `specs/TEMPLATE.md` or `docs/decisions/0000-template.md` first.
+3. **Issue or TODO** — if not handled by `/autopilot --bootstrap`, capture intent before code.
+4. **Implement** — match GENESIS exactly. No deps outside §13 without justification. No `unwrap`/`expect` outside `#[cfg(test)]`.
+5. **`/check`** — full local quality gate. Don't proceed past failures; root-cause them.
+6. **`genesis-validator`** subagent for non-trivial changes; require `READY` or `READY-WITH-NOTES`.
+7. **`rust-reviewer`** subagent before opening a PR; act on `REQUEST-CHANGES` and `BLOCK` verdicts.
+8. **Commit** — Conventional Commits, one logical change.
+9. **PR** at phase boundaries via `/cut-phase <N>`.
 
-- `genesis-validator` — read-only check that implementation matches the spec.
-- `rust-test-runner` — focused test runner that returns a tight failure summary.
+## Skills
+
+| Skill              | When to use                                                             |
+| ------------------ | ----------------------------------------------------------------------- |
+| `/check`           | Before declaring a task done; before opening a PR.                      |
+| `/next`            | Start of session; whenever the user asks "what's next?".                |
+| `/research <topic>` | Before designing or implementing when GENESIS is silent.               |
+| `/spike <id>`      | Phase 0 verification runner; appends to `docs/spike-results.md`.        |
+| `/genesis-check`   | Before tagging a phase or merging a non-trivial PR.                     |
+| `/cut-phase <N>`   | Phase boundary: tag + push + PR scaffold.                               |
+| `/autopilot`       | Drive the current phase autonomously, one task per call.                |
+| `/loop /autopilot` | Hands-off continuous execution; halts on its own at phase boundaries.   |
+
+## Subagents
+
+| Agent              | Purpose                                                                 |
+| ------------------ | ----------------------------------------------------------------------- |
+| `genesis-validator` | Read-only spec audit. Returns `READY` / `READY-WITH-NOTES` / `BLOCKED`. |
+| `rust-reviewer`    | Idiom + safety + perf + architecture review against GENESIS and lints.  |
+| `rust-test-runner` | Tight test failure summary (model: haiku).                              |
+
+## Rules
+
+- @.claude/rules/collaboration.md
 
 ## When in doubt
 

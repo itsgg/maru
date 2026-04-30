@@ -1,0 +1,12 @@
+# prettier only formats markdown in this repo. Everything else is rustfmt's job
+# or has its own opinionated formatter.
+*
+!*.md
+!**/*.md
+
+# Even within markdown, skip these.
+target/
+**/snapshots/
+CHANGELOG.md
+LICENSE-APACHE
+LICENSE-MIT

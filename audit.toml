@@ -1,0 +1,12 @@
+# cargo-audit advisory ignore list. Empty by default.
+#
+# Add entries only with a real reason and a tracking issue.
+# Format:
+#
+# [advisories]
+# ignore = [
+#     "RUSTSEC-YYYY-NNNN",  # tracked in #123; upstream fix landing in 0.x.y
+# ]
+#
+# `cargo audit` reads this file. `cargo deny` reads `deny.toml` separately;
+# don't conflate the two.

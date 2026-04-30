@@ -14,18 +14,46 @@ homepage      = "https://github.com/gg/maru"
 authors       = ["maru contributors"]
 
 # Workspace-wide lint config. Member crates inherit via `[lints] workspace = true`.
+# Three layers: deny dangerous, warn safety-relevant, pedantic baseline.
 [workspace.lints.rust]
-unsafe_code        = "deny"      # only the shim's env-application block uses unsafe; allow there.
-missing_docs       = "warn"
-unreachable_pub    = "warn"
+unsafe_code               = "deny"   # crates/maru-shim env-application allowed via crate-local override
+missing_docs              = "warn"
+unreachable_pub           = "warn"
 elided_lifetimes_in_paths = "warn"
 
 [workspace.lints.clippy]
-all       = { level = "warn", priority = -1 }
-pedantic  = { level = "warn", priority = -1 }
-nursery   = { level = "warn", priority = -1 }
-cargo     = { level = "warn", priority = -1 }
-# Allows: pedantic lints that produce more noise than signal in this codebase.
+all      = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
+cargo    = { level = "warn", priority = -1 }
+
+# Deny — these are bugs we never want shipped.
+todo                = "deny"
+dbg_macro           = "deny"
+unimplemented       = "deny"
+exit                = "deny"
+print_stderr        = "deny"   # use tracing/eprintln! through the cli error printer
+print_stdout        = "deny"   # use the cli output abstraction; preserves --json contract
+
+# Warn — safety-relevant; allow with a justifying comment when truly needed.
+unwrap_used                  = "warn"
+expect_used                  = "warn"
+indexing_slicing             = "warn"
+arithmetic_side_effects      = "warn"
+as_conversions               = "warn"
+panic                        = "warn"
+clone_on_ref_ptr             = "warn"
+str_to_string                = "warn"
+lossy_float_literal          = "warn"
+mem_forget                   = "warn"
+verbose_file_reads           = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+let_underscore_must_use      = "warn"
+empty_structs_with_brackets  = "warn"
+undocumented_unsafe_blocks   = "warn"
+multiple_unsafe_ops_per_block = "warn"
+
+# Allow — pedantic lints that produce more noise than signal here.
 module_name_repetitions = "allow"
 must_use_candidate      = "allow"
 missing_errors_doc      = "allow"
@@ -62,9 +90,12 @@ predicates  = "3"
 insta       = { version = "1", features = ["yaml"] }
 proptest    = "1"
 
-# `release` profile: GENESIS doesn't override; use cargo defaults.
-# `shim` profile: GENESIS §9. Pinned here so it applies to crates/maru-shim
-# once that crate exists.
+[profile.release]
+lto           = "thin"
+codegen-units = 1
+strip         = true
+
+# `shim` profile: GENESIS §9. Applies to crates/maru-shim once that crate exists.
 [profile.shim]
 inherits      = "release"
 panic         = "abort"

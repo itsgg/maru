@@ -21,9 +21,7 @@ Exit criteria (from GENESIS §14):
 - [x] **1.6** — `ProfileContext` borrowed struct (5 fields per §6 line 173). 2 tests. _(GENESIS §6 line 173)_
 - [x] **1.7** — `ActivationPlan` (env + args_prefix + diagnostics) + builder + `has_errors()`. 3 tests, 1 doctest. _(GENESIS §6 line 217)_
 - [x] **1.8** — `SeedFile` + `MergeStrategy` (OverwriteIfMissing / TomlMergeShallow). 2 tests. _(GENESIS §6 line 226)_
-- [ ] **1.9** — `HarnessAdapter` trait (id, binary_names, profile_subdir, detect, plan, validate, seed) _(GENESIS §6 line 191)_
-  - depends-on: 1.3, 1.5, 1.6, 1.7, 1.8
-  - acceptance: trait signatures match §6; default `seed()` returns `vec![]`.
+- [x] **1.9** — `HarnessAdapter` trait (`id`, `binary_names`, `profile_subdir`, `detect`, `plan`, `validate`, `seed` with default). 6 tests via in-test TestAdapter, including Send+Sync + dyn trait object compilation. _(GENESIS §6 line 191)_
 - [x] **1.10** — `Detection` (Found/NotFound + helpers), `AdapterError` (thiserror, NotAbsolute/MissingEnv/Other), `ValidationReport` (builder). 4 tests. _(GENESIS §6 line 200, 194, 197)_
 
 ## maru-store

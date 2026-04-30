@@ -5,6 +5,7 @@
 //! `/autopilot` task list as Phase 1 progresses.
 #![forbid(unsafe_code)]
 
+mod adapter;
 mod adapter_types;
 mod context;
 mod diagnostic;
@@ -14,6 +15,7 @@ mod plan;
 mod profile_name;
 mod seed;
 
+pub use adapter::HarnessAdapter;
 pub use adapter_types::{AdapterError, Detection, ValidationReport};
 pub use context::ProfileContext;
 pub use diagnostic::{Diagnostic, Level};

@@ -20,12 +20,8 @@ Exit criteria (from GENESIS §14):
 - [ ] **1.5** — `Environment` trait + real `SystemEnvironment` impl _(GENESIS §6 line 240)_
   - depends-on: —
   - acceptance: trait methods match §6 exactly; real impl uses `std::env`, `which` crate; unit tests against a fake.
-- [ ] **1.6** — `ProfileContext` borrowed struct _(GENESIS §6 line 173)_
-  - depends-on: 1.1, 1.3
-  - acceptance: lifetime-correct; fields match §6.
-- [ ] **1.7** — `ActivationPlan` (env + args_prefix + diagnostics; no FsOps in v1) + `Default` _(GENESIS §6 line 217)_
-  - depends-on: 1.4
-  - acceptance: derives Debug/Clone/Default.
+- [x] **1.6** — `ProfileContext` borrowed struct (5 fields per §6 line 173). 2 tests. _(GENESIS §6 line 173)_
+- [x] **1.7** — `ActivationPlan` (env + args_prefix + diagnostics) + builder + `has_errors()`. 3 tests, 1 doctest. _(GENESIS §6 line 217)_
 - [x] **1.8** — `SeedFile` + `MergeStrategy` (OverwriteIfMissing / TomlMergeShallow). 2 tests. _(GENESIS §6 line 226)_
 - [ ] **1.9** — `HarnessAdapter` trait (id, binary_names, profile_subdir, detect, plan, validate, seed) _(GENESIS §6 line 191)_
   - depends-on: 1.3, 1.5, 1.6, 1.7, 1.8

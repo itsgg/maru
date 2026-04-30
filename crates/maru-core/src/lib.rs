@@ -6,13 +6,17 @@
 #![forbid(unsafe_code)]
 
 mod adapter_types;
+mod context;
 mod diagnostic;
 mod harness;
+mod plan;
 mod profile_name;
 mod seed;
 
 pub use adapter_types::{AdapterError, Detection, ValidationReport};
+pub use context::ProfileContext;
 pub use diagnostic::{Diagnostic, Level};
 pub use harness::{HarnessId, UnknownHarness};
+pub use plan::ActivationPlan;
 pub use profile_name::{InvalidName, ProfileName};
 pub use seed::{MergeStrategy, SeedFile};

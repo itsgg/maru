@@ -9,13 +9,12 @@ cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 [[ -z "$cmd" ]] && exit 0
 
 # Patterns that should never run, even if the model asks.
+# Force-push to phase-* branches IS allowed (autopilot rebases them); only main/master is protected.
 deny_patterns=(
   # rm -rf at home or root
   '(^|[[:space:]])rm[[:space:]]+-rf[[:space:]]+(/|~|\$HOME)([[:space:]]|$)'
-  # force-push to main / master (with explicit branch)
-  'git[[:space:]]+push[[:space:]]+(--force|-f)([[:space:]]|$).*[[:space:]](main|master)([[:space:]]|$)'
-  'git[[:space:]]+push[[:space:]]+(--force|-f)[[:space:]]+origin[[:space:]]+(main|master)([[:space:]]|$)'
-  'git[[:space:]]+push[[:space:]]+(--force-with-lease=?[^[:space:]]*)[[:space:]]+origin[[:space:]]+(main|master)([[:space:]]|$)'
+  # force-push to main / master with explicit ref
+  'git[[:space:]]+push[[:space:]]+(--force|-f|--force-with-lease=?[^[:space:]]*)[[:space:]]+\S+[[:space:]]+(main|master)([[:space:]]|$)'
   # hard-reset main / master (or origin/main)
   'git[[:space:]]+reset[[:space:]]+--hard[[:space:]]+(origin/)?(main|master)([[:space:]]|$)'
   # forceful clean of the working tree
@@ -40,6 +39,9 @@ if [[ -z "$reason" ]] && printf '%s' "$cmd" | grep -qE '^git[[:space:]]+push([[:
     fi
   fi
 fi
+
+# Force-push allowed to phase-* branches (autopilot rebases them).
+# This block intentionally permissive: anything not denied above is allowed.
 
 if [[ -n "$reason" ]]; then
   jq -n --arg c "$cmd" --arg r "$reason" \

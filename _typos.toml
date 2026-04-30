@@ -1,0 +1,21 @@
+[files]
+extend-exclude = [
+    "target/",
+    "**/snapshots/",
+    "**/*.snap",
+    "Cargo.lock",
+    "CHANGELOG.md",
+]
+
+[default]
+extend-ignore-re = [
+    # Allow per-line escape: `# spellchecker:disable-line`
+    "(?Rm)^.*#\\s*spellchecker:disable-line$",
+]
+
+[default.extend-words]
+# Project-specific terms typos shouldn't flag.
+# Format: lowercase = lowercase
+maru        = "maru"
+hyperfine   = "hyperfine"
+junctioned  = "junctioned"

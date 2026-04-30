@@ -1,0 +1,42 @@
+# Cargo / Rust
+/target/
+**/*.rs.bk
+*.pdb
+debug/
+Cargo.lock.bak
+
+# Profiling / benchmarking
+flamegraph.svg
+perf.data
+perf.data.old
+profile.json
+bench.json
+bench.md
+
+# insta snapshots (pending state only; committed snapshots stay)
+*.pending-snap
+*.rs.pending-snap
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+.*.sw?
+
+# Direnv / env
+.envrc
+.env
+.env.*
+!.env.example
+
+# Claude Code (per-developer; team config lives in .claude/settings.json)
+.claude/settings.local.json
+.claude/.credentials.json
+CLAUDE.local.md
+
+# Cargo lock is committed for binary workspaces. Don't ignore it.

@@ -1,0 +1,17 @@
+msrv = "1.85"
+
+# Recognized identifiers in doc comments that clippy::doc_markdown should not flag.
+doc-valid-idents = [
+    "..",
+    "GitHub", "GraphQL", "JSON", "TOML", "YAML",
+    "macOS", "iOS", "WSL2", "PATH",
+    "Anthropic", "OpenAI", "Codex", "Gemini", "MCP", "OAuth",
+    "MARU_HOME", "MARU_PROFILE",
+    "CLAUDE_CONFIG_DIR", "CODEX_HOME", "GEMINI_CLI_HOME",
+]
+
+# Add disallowed-methods entries here as the codebase teaches us what to ban.
+# Pattern (uncomment and adapt):
+# disallowed-methods = [
+#   { path = "std::env::var", reason = "use Environment trait so adapters stay testable" },
+# ]

@@ -1,0 +1,74 @@
+# Workspace manifest. Member crates are added in Phase 1 (see GENESIS §14).
+# Until then this defines workspace-wide lints, dep versions, and metadata.
+[workspace]
+resolver = "3"
+members  = []
+
+[workspace.package]
+version       = "0.0.0"
+edition       = "2024"
+rust-version  = "1.85"
+license       = "Apache-2.0 OR MIT"
+repository    = "https://github.com/gg/maru"
+homepage      = "https://github.com/gg/maru"
+authors       = ["maru contributors"]
+
+# Workspace-wide lint config. Member crates inherit via `[lints] workspace = true`.
+[workspace.lints.rust]
+unsafe_code        = "deny"      # only the shim's env-application block uses unsafe; allow there.
+missing_docs       = "warn"
+unreachable_pub    = "warn"
+elided_lifetimes_in_paths = "warn"
+
+[workspace.lints.clippy]
+all       = { level = "warn", priority = -1 }
+pedantic  = { level = "warn", priority = -1 }
+nursery   = { level = "warn", priority = -1 }
+cargo     = { level = "warn", priority = -1 }
+# Allows: pedantic lints that produce more noise than signal in this codebase.
+module_name_repetitions = "allow"
+must_use_candidate      = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+
+# Pinned versions for shared deps. See GENESIS §13 for the dependency budget.
+# Member crates use these via `<dep> = { workspace = true }`.
+[workspace.dependencies]
+# Core deps (used across multiple crates)
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+toml        = "0.8"
+thiserror   = "2"
+anyhow      = "1"
+
+# CLI / logging
+clap                 = { version = "4", features = ["derive"] }
+tracing              = "0.1"
+tracing-subscriber   = { version = "0.3", features = ["env-filter", "json"] }
+
+# Filesystem / paths / locks
+directories = "6"
+fd-lock     = "4"
+tempfile    = "3"
+which       = "7"
+
+# Archive (export/import)
+tar    = "0.4"
+flate2 = "1"
+
+# Dev / test
+assert_cmd  = "2"
+predicates  = "3"
+insta       = { version = "1", features = ["yaml"] }
+proptest    = "1"
+
+# `release` profile: GENESIS doesn't override; use cargo defaults.
+# `shim` profile: GENESIS §9. Pinned here so it applies to crates/maru-shim
+# once that crate exists.
+[profile.shim]
+inherits      = "release"
+panic         = "abort"
+lto           = "fat"
+codegen-units = 1
+strip         = "symbols"
+opt-level     = "z"

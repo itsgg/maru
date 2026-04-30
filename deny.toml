@@ -1,0 +1,51 @@
+# cargo-deny config. Modeled on EmbarkStudios/cargo-deny's own deny.toml.
+# Run: `cargo deny check`
+
+[graph]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+all-features = true
+
+[advisories]
+version = 2
+yanked  = "deny"
+ignore  = []
+
+[licenses]
+version              = 2
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards         = "deny"
+deny = [
+    # Per GENESIS §13: no async, no networking. Fail loudly if a transitive
+    # dep tries to pull these in.
+    { crate = "tokio",      use-instead = "synchronous code" },
+    { crate = "async-std",  use-instead = "synchronous code" },
+    { crate = "reqwest",    use-instead = "no networking allowed in v1" },
+    # Prefer rustls over OpenSSL where TLS sneaks in via a transitive dep.
+    { crate = "openssl",     use-instead = "rustls" },
+    { crate = "openssl-sys", use-instead = "rustls" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git      = "deny"
+allow-git        = []

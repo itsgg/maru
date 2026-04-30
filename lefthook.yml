@@ -1,0 +1,39 @@
+# lefthook config. Install: `brew install lefthook && lefthook install`.
+# https://lefthook.dev
+min_version: 1.13.0
+
+# Pre-commit: fast checks (≈ seconds). Don't block on tests here.
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.rs"
+      run: cargo fmt --all -- --check
+    clippy:
+      glob: "*.{rs,toml}"
+      run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+    typos:
+      run: typos
+    deny:
+      glob: "{Cargo.toml,Cargo.lock,deny.toml}"
+      run: cargo deny --all-features check
+
+# Pre-push: slower checks. Tests + unused-deps audit.
+pre-push:
+  parallel: true
+  commands:
+    test:
+      run: cargo nextest run --workspace --all-features
+    machete:
+      run: cargo machete
+
+# Commit-msg: minimal Conventional Commits gate (no Node, no commitlint).
+# If you outgrow grep, swap in `npx commitlint --edit {1}`.
+commit-msg:
+  commands:
+    conventional:
+      run: |
+        head -n1 {1} | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_/-]+\))?!?: .{1,100}$' \
+          || { echo "Commit message must follow Conventional Commits."; \
+               echo "Examples: 'feat: add codex adapter', 'fix(shim): handle empty argv'"; \
+               exit 1; }

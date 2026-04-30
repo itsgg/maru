@@ -5,6 +5,8 @@
 //! `/autopilot` task list as Phase 1 progresses.
 #![forbid(unsafe_code)]
 
+mod harness;
 mod profile_name;
 
+pub use harness::{HarnessId, UnknownHarness};
 pub use profile_name::{InvalidName, ProfileName};

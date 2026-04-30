@@ -15,9 +15,7 @@ Exit criteria (from GENESIS §14):
 
 - [x] **1.1** — `ProfileName` newtype with validation `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`. 8 tests, doctest, serde round-trip. _(GENESIS §6 line 162)_
 - [x] **1.2** — `InvalidName` error type (Empty / TooLong / BadFirstChar / IllegalChar). _(GENESIS §6 line 165)_
-- [ ] **1.3** — `HarnessId` enum (Claude, Codex, Gemini) _(GENESIS §6 line 165)_
-  - depends-on: —
-  - acceptance: derives Clone/Copy/Debug/PartialEq/Eq/Hash/Serialize/Deserialize.
+- [x] **1.3** — `HarnessId` enum + `UnknownHarness` error + `FromStr`/`Display`/`as_str`/`ALL`. 9 tests, 1 doctest. _(GENESIS §6 line 165)_
 - [ ] **1.4** — `Level` enum (Info | Warn | Error) and `Diagnostic` struct _(GENESIS §6 line 232)_
   - depends-on: —
   - acceptance: builder or struct-literal-friendly construction; matches §6 signature.

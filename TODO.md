@@ -16,9 +16,7 @@ Exit criteria (from GENESIS §14):
 - [x] **1.1** — `ProfileName` newtype with validation `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`. 8 tests, doctest, serde round-trip. _(GENESIS §6 line 162)_
 - [x] **1.2** — `InvalidName` error type (Empty / TooLong / BadFirstChar / IllegalChar). _(GENESIS §6 line 165)_
 - [x] **1.3** — `HarnessId` enum + `UnknownHarness` error + `FromStr`/`Display`/`as_str`/`ALL`. 9 tests, 1 doctest. _(GENESIS §6 line 165)_
-- [ ] **1.4** — `Level` enum (Info | Warn | Error) and `Diagnostic` struct _(GENESIS §6 line 232)_
-  - depends-on: —
-  - acceptance: builder or struct-literal-friendly construction; matches §6 signature.
+- [x] **1.4** — `Level` (ordered Info<Warn<Error) + `Diagnostic` with builders. 4 tests, 1 doctest. _(GENESIS §6 line 232)_
 - [ ] **1.5** — `Environment` trait + real `SystemEnvironment` impl _(GENESIS §6 line 240)_
   - depends-on: —
   - acceptance: trait methods match §6 exactly; real impl uses `std::env`, `which` crate; unit tests against a fake.
@@ -28,15 +26,11 @@ Exit criteria (from GENESIS §14):
 - [ ] **1.7** — `ActivationPlan` (env + args_prefix + diagnostics; no FsOps in v1) + `Default` _(GENESIS §6 line 217)_
   - depends-on: 1.4
   - acceptance: derives Debug/Clone/Default.
-- [ ] **1.8** — `SeedFile` + `MergeStrategy` enum _(GENESIS §6 line 226)_
-  - depends-on: —
-  - acceptance: variants `OverwriteIfMissing`, `TomlMergeShallow` per §6.
+- [x] **1.8** — `SeedFile` + `MergeStrategy` (OverwriteIfMissing / TomlMergeShallow). 2 tests. _(GENESIS §6 line 226)_
 - [ ] **1.9** — `HarnessAdapter` trait (id, binary_names, profile_subdir, detect, plan, validate, seed) _(GENESIS §6 line 191)_
   - depends-on: 1.3, 1.5, 1.6, 1.7, 1.8
   - acceptance: trait signatures match §6; default `seed()` returns `vec![]`.
-- [ ] **1.10** — `Detection`, `AdapterError`, `ValidationReport` supporting types _(GENESIS §6 line 200, 194, 197)_
-  - depends-on: —
-  - acceptance: minimal but ergonomic; `AdapterError` is `thiserror`-derived.
+- [x] **1.10** — `Detection` (Found/NotFound + helpers), `AdapterError` (thiserror, NotAbsolute/MissingEnv/Other), `ValidationReport` (builder). 4 tests. _(GENESIS §6 line 200, 194, 197)_
 
 ## maru-store
 

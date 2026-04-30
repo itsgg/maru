@@ -19,3 +19,6 @@ extend-ignore-re = [
 maru        = "maru"
 hyperfine   = "hyperfine"
 junctioned  = "junctioned"
+flate       = "flate"      # crate name `flate2`
+crate-ci    = "crate-ci"   # GitHub org for typos
+juliangruber = "juliangruber"

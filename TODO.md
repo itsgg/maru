@@ -17,9 +17,7 @@ Exit criteria (from GENESIS §14):
 - [x] **1.2** — `InvalidName` error type (Empty / TooLong / BadFirstChar / IllegalChar). _(GENESIS §6 line 165)_
 - [x] **1.3** — `HarnessId` enum + `UnknownHarness` error + `FromStr`/`Display`/`as_str`/`ALL`. 9 tests, 1 doctest. _(GENESIS §6 line 165)_
 - [x] **1.4** — `Level` (ordered Info<Warn<Error) + `Diagnostic` with builders. 4 tests, 1 doctest. _(GENESIS §6 line 232)_
-- [ ] **1.5** — `Environment` trait + real `SystemEnvironment` impl _(GENESIS §6 line 240)_
-  - depends-on: —
-  - acceptance: trait methods match §6 exactly; real impl uses `std::env`, `which` crate; unit tests against a fake.
+- [x] **1.5** — `Environment` trait + `SystemEnvironment` (real, hand-rolled `which`) + `FakeEnvironment` (in-memory test double, exported for adapter tests). 6 tests including cross-platform `which_skipping`. _(GENESIS §6 line 240)_
 - [x] **1.6** — `ProfileContext` borrowed struct (5 fields per §6 line 173). 2 tests. _(GENESIS §6 line 173)_
 - [x] **1.7** — `ActivationPlan` (env + args_prefix + diagnostics) + builder + `has_errors()`. 3 tests, 1 doctest. _(GENESIS §6 line 217)_
 - [x] **1.8** — `SeedFile` + `MergeStrategy` (OverwriteIfMissing / TomlMergeShallow). 2 tests. _(GENESIS §6 line 226)_

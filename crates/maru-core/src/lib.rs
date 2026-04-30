@@ -8,6 +8,7 @@
 mod adapter_types;
 mod context;
 mod diagnostic;
+mod environment;
 mod harness;
 mod plan;
 mod profile_name;
@@ -16,6 +17,7 @@ mod seed;
 pub use adapter_types::{AdapterError, Detection, ValidationReport};
 pub use context::ProfileContext;
 pub use diagnostic::{Diagnostic, Level};
+pub use environment::{Environment, FakeEnvironment, SystemEnvironment};
 pub use harness::{HarnessId, UnknownHarness};
 pub use plan::ActivationPlan;
 pub use profile_name::{InvalidName, ProfileName};

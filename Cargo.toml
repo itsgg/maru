@@ -1,8 +1,8 @@
-# Workspace manifest. Member crates are added in Phase 1 (see GENESIS §14).
-# Until then this defines workspace-wide lints, dep versions, and metadata.
+# Workspace manifest. Phase 1 crates land per the /autopilot task list.
+# `maru-core` is a Phase 1 scaffold so cargo commands have a valid target.
 [workspace]
 resolver = "3"
-members  = []
+members  = ["crates/maru-core"]
 
 [workspace.package]
 version       = "0.0.0"

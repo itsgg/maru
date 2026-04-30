@@ -97,7 +97,9 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - run: cargo nextest run --workspace --all-features
+      # `--no-tests=pass` until Phase 1 adds the first real test (placeholder
+       # crate ships with zero tests by design).
+      - run: cargo nextest run --workspace --all-features --no-tests=pass
       - run: cargo test --doc --workspace --all-features
 
   # Shim cold-start gate. Enabled once `crates/maru-shim` exists (Phase 1).

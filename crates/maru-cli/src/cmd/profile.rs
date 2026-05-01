@@ -45,6 +45,11 @@ pub enum ProfileCmd {
     Import(ImportArgs),
     /// Copy an existing `~/.<harness>` directory into a new maru profile.
     ImportExisting(ImportExistingArgs),
+    /// Authenticate a profile against a harness's auth provider and save
+    /// a per-profile credential the activation plan can export. Currently
+    /// supports Claude (runs `claude setup-token` and writes the resulting
+    /// OAuth token to `<profile>/claude/oauth_token`).
+    Login(LoginArgs),
 }
 
 #[derive(Debug, Args)]
@@ -143,6 +148,21 @@ pub struct ImportExistingArgs {
     pub from: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+pub struct LoginArgs {
+    /// Profile to authenticate (must already exist).
+    pub name: String,
+    /// Which harness to log in to. Currently only `claude` is supported.
+    #[arg(long, default_value = "claude")]
+    pub harness: HarnessId,
+    /// Read the token from stdin instead of running `claude setup-token`
+    /// interactively. Useful for piping (`claude setup-token | tail -1
+    /// | maru profile login work --stdin`) or for users who prefer to
+    /// generate the token separately and paste it.
+    #[arg(long)]
+    pub stdin: bool,
+}
+
 pub fn run(ctx: &CliContext, cmd: ProfileCmd) -> Result<()> {
     match cmd {
         ProfileCmd::Create(args) => create(ctx, args),
@@ -158,6 +178,7 @@ pub fn run(ctx: &CliContext, cmd: ProfileCmd) -> Result<()> {
         ProfileCmd::Export(args) => export(ctx, args),
         ProfileCmd::Import(args) => import(ctx, args),
         ProfileCmd::ImportExisting(args) => import_existing(ctx, args),
+        ProfileCmd::Login(args) => login(ctx, args),
     }
 }
 
@@ -708,6 +729,145 @@ fn import_existing(ctx: &CliContext, args: ImportExistingArgs) -> Result<()> {
             );
         }
     }
+    Ok(())
+}
+
+fn login(ctx: &CliContext, args: LoginArgs) -> Result<()> {
+    if args.harness != HarnessId::Claude {
+        bail!(CliError::user(
+            "`maru profile login` currently supports only --harness claude. \
+             Codex and Gemini stash their tokens differently; track via the \
+             carve-outs in docs/limitations.md.",
+        ));
+    }
+
+    let name =
+        ProfileName::new(args.name).map_err(|e| CliError::user(format!("invalid name: {e}")))?;
+
+    // Profile must already exist; this command is the second step after
+    // `maru profile create`, not a profile-creation shortcut.
+    let state = read_state(ctx.maru_home()).context("read state.toml")?;
+    if !state.profiles.contains_key(name.as_str()) {
+        bail!(CliError::user(format!(
+            "no such profile {:?} — run `maru profile create {} --harness claude` first",
+            name.as_str(),
+            name.as_str()
+        )));
+    }
+
+    let token_path = ctx
+        .profile_root(name.as_str())
+        .join(profile_subdir(HarnessId::Claude))
+        .join("oauth_token");
+    if let Some(parent) = token_path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+
+    let token = if args.stdin {
+        read_token_from_stdin().context("read token from stdin")?
+    } else {
+        run_claude_setup_token_and_capture(&name)?
+    };
+    if token.is_empty() {
+        bail!(CliError::user("no token captured — aborting"));
+    }
+
+    write_token_file(&token_path, &token).context("write oauth_token")?;
+    eprintln!(
+        "maru: saved Claude OAuth token for profile {:?} → {}",
+        name.as_str(),
+        token_path.display()
+    );
+    eprintln!(
+        "maru: subsequent `claude` invocations under {:?} will authenticate with this token \
+         (CLAUDE_CODE_OAUTH_TOKEN), bypassing the macOS Keychain.",
+        name.as_str()
+    );
+    Ok(())
+}
+
+/// Read a token from stdin: take the last non-empty trimmed line, so
+/// `claude setup-token | maru profile login work --stdin` works (the
+/// last line of `claude setup-token`'s stdout is the token).
+fn read_token_from_stdin() -> Result<String> {
+    use std::io::Read;
+    let mut buf = String::new();
+    std::io::stdin().read_to_string(&mut buf)?;
+    Ok(buf
+        .lines()
+        .map(str::trim)
+        .rfind(|l| !l.is_empty())
+        .unwrap_or_default()
+        .to_owned())
+}
+
+/// Run `claude setup-token` interactively (stdin/stderr inherited so the
+/// user can complete OAuth), capturing stdout. The last non-empty line of
+/// stdout is the OAuth token. We tee stdout to the user's terminal so
+/// they see the same output they'd see running the command directly.
+fn run_claude_setup_token_and_capture(profile: &ProfileName) -> Result<String> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+
+    eprintln!(
+        "maru: launching `claude setup-token` to authenticate profile {:?}.",
+        profile.as_str()
+    );
+    eprintln!(
+        "maru: complete the OAuth flow in your browser; the token printed at \
+         the end will be captured automatically. (Re-run with --stdin if \
+         you've already generated a token.)"
+    );
+
+    let mut child = Command::new("claude")
+        .arg("setup-token")
+        .stdin(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("spawn `claude setup-token` (is `claude` on PATH? install Claude Code first)")?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("child stdout pipe missing"))?;
+
+    let mut last_line = String::new();
+    let reader = BufReader::new(stdout);
+    let mut user_stdout = std::io::stdout();
+    for line in reader.lines() {
+        let line = line.context("read claude setup-token stdout")?;
+        let _ = writeln!(user_stdout, "{line}");
+        let _ = user_stdout.flush();
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            trimmed.clone_into(&mut last_line);
+        }
+    }
+
+    let status = child.wait().context("wait for claude setup-token")?;
+    if !status.success() {
+        bail!(CliError::user(format!(
+            "`claude setup-token` exited with status {status}"
+        )));
+    }
+    Ok(last_line)
+}
+
+/// Write `token` to `path` with mode 0600 on Unix (best-effort).
+fn write_token_file(path: &std::path::Path, token: &str) -> std::io::Result<()> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path)?;
+    f.write_all(token.as_bytes())?;
+    f.write_all(b"\n")?;
     Ok(())
 }
 

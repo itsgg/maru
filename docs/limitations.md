@@ -40,22 +40,30 @@ Per Claude Code 2.1.x, the following carve-outs are still upstream issues, not m
 
 `maru doctor` flags these as carve-outs. When upstream fixes one, maru drops the corresponding warning in the same PR.
 
-### Claude on macOS: shared Keychain credential storage (default)
+### Claude credential isolation: use `maru profile login` (per-profile OAuth token)
 
-On macOS, Claude Code stores OAuth credentials in the **system Keychain** under a single shared service name (`Claude Safe Storage` / account `Claude Key`) — one entry, regardless of `CLAUDE_CONFIG_DIR`. This means **Claude credentials are not isolated per maru profile on macOS**:
+Claude Code's OAuth credentials are stored in the macOS Keychain (or `~/.claude/.credentials.json` on Linux/Windows). The Keychain entry is **not reliably keyed per `CLAUDE_CONFIG_DIR`** across the Claude Code 2.1.x line — logging out from one profile has been observed to clear credentials shared with other profiles.
 
-- Logging in to Claude under one profile overwrites the Keychain entry that other profiles' Claude installs read from.
-- Logging out under one profile (e.g. via `/logout`) deletes the shared Keychain entry, so other profiles appear logged out too.
+The fix maru ships: per-profile OAuth tokens via the `CLAUDE_CODE_OAUTH_TOKEN` env var, which is documented as authentication-precedence step 5 in [Claude Code's auth docs](https://code.claude.com/docs/en/authentication) — env-var tokens win over the Keychain. When the env var is set, Claude Code does not consult the Keychain at all.
 
-`CLAUDE_CONFIG_DIR` only redirects *file* state (sessions, projects, settings, plugins). It cannot redirect macOS Keychain access — that's keyed by service name + account, not by directory.
+**Setup:**
 
-This is structurally the same as the Codex `keyring` and Gemini `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE` cases below, but Claude does it **by default** with no opt-out env var as of Claude Code 2.1.x. Tracked upstream conceptually in [anthropics/claude-code#47661](https://github.com/anthropics/claude-code/issues/47661) (Linux fallback to file storage); a per-`CLAUDE_CONFIG_DIR` Keychain key would be the structural fix.
+```sh
+maru profile create work --harness claude
+maru profile login work             # wraps `claude setup-token`; pastes the token into <profile>/claude/oauth_token
+maru profile use work
+claude                              # authenticates with the work-profile token, ignoring Keychain
+```
 
-**Workaround until upstream offers per-config-dir Keychain isolation:**
+The Claude adapter reads `<profile>/claude/oauth_token` at activation and exports `CLAUDE_CODE_OAUTH_TOKEN`. Each profile keeps its own token; logging out from one no longer affects another. The token file is on the GENESIS §8 deny-list and is never copied by `maru profile clone` / `export` / `import`.
 
-- Use the **same Claude account** across maru profiles (so the shared Keychain entry "just works"). The other Claude state (sessions, projects, MCP, settings, plugins) IS isolated per profile, which is still useful.
-- For different Claude accounts, log out before switching profiles — and accept that you'll re-authenticate on the next switch back. Painful, but honest.
-- On Linux/WSL2 without a D-Bus session, Claude falls through to file storage in `<CLAUDE_CONFIG_DIR>/.credentials.json`, which IS per-profile. The credential gate (#47661) blocks the *opposite* failure mode (real `~/.claude/.credentials.json` overriding the redirect).
+If you'd rather generate the token yourself (for example to keep the OAuth flow in your usual terminal), pipe it in:
+
+```sh
+claude setup-token | maru profile login work --stdin
+```
+
+Codex and Gemini still rely on file-level isolation (see the keyring caveats below); per-profile OAuth tokens for those harnesses are not yet wired.
 
 ### Codex: `keyring` storage mode
 

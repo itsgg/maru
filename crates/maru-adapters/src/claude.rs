@@ -2,7 +2,9 @@
 //!
 //! GENESIS §7.1. Mechanism: `CLAUDE_CONFIG_DIR` env var redirection,
 //! plus `CLAUDE_CODE_PLUGIN_CACHE_DIR` emitted unconditionally to address
-//! upstream issue #15071 (plugin marketplaces dir hardcoded).
+//! upstream issue #15071 (plugin marketplaces dir hardcoded), plus
+//! `CLAUDE_CODE_OAUTH_TOKEN` populated from a per-profile `oauth_token`
+//! file when present (see "OAuth token isolation" below).
 //!
 //! Linux/WSL credential gate (#47661): on Linux/WSL2 without a Keychain,
 //! `claude` falls through to reading `~/.claude/.credentials.json` even
@@ -10,6 +12,28 @@
 //! account. The adapter emits `Diagnostic { level: Error }` if the
 //! offending file exists; the shim treats this as a fatal pre-exec block
 //! per GENESIS §11.
+//!
+//! ## OAuth token isolation (per-profile credentials)
+//!
+//! Claude Code on macOS stores OAuth credentials in the system Keychain.
+//! While Claude Code derives the Keychain service name from
+//! `CLAUDE_CONFIG_DIR` in some versions, the per-config-dir Keychain
+//! isolation has been observed to fail across Claude Code 2.1.x in the
+//! wild — logging out of one profile clears credentials shared by other
+//! profiles. The reliable, documented escape hatch is the
+//! `CLAUDE_CODE_OAUTH_TOKEN` env var (Claude Code authentication
+//! precedence step 5; see code.claude.com/docs/en/authentication).
+//!
+//! When `<profile_root>/claude/oauth_token` exists, the adapter reads it
+//! (single-line OAuth token, leading/trailing whitespace stripped) and
+//! emits `CLAUDE_CODE_OAUTH_TOKEN`. With the token in env, Claude Code
+//! authenticates with it directly and does not consult the Keychain at
+//! all — every profile gets its own token, isolated by file. Generate a
+//! token per profile with `claude setup-token` (or `maru profile login
+//! <name>`) and the adapter handles the rest.
+//!
+//! The `oauth_token` file is on the §8 credential deny-list so it never
+//! leaks via clone / export / import.
 
 use std::path::Path;
 
@@ -69,6 +93,11 @@ impl HarnessAdapter for ClaudeAdapter {
                 ctx.profile_root.join("claude/plugins").into_os_string(),
             );
 
+        // Per-profile OAuth token. See module docs.
+        if let Some(token) = read_oauth_token(&ctx.profile_root.join("claude/oauth_token")) {
+            plan = plan.with_env("CLAUDE_CODE_OAUTH_TOKEN", token);
+        }
+
         // Linux/WSL credential gate (#47661). Detect the silent-fallthrough
         // condition and emit a fatal diagnostic if it would activate.
         if let Some(diag) = linux_wsl_credential_gate(ctx, env) {
@@ -93,6 +122,28 @@ impl HarnessAdapter for ClaudeAdapter {
         // nightly job is online. For now, an existing dir is OK.
         ValidationReport::new()
     }
+}
+
+/// Read the per-profile OAuth token from the given path, returning the
+/// trimmed contents as an `OsString` suitable for env-var emission.
+///
+/// Returns `None` if the file is missing, unreadable, empty, or contains
+/// only whitespace. Errors during the read (permissions, I/O) are
+/// silently swallowed because this is a soft fallback — a missing or
+/// unreadable token file just means "use the Keychain instead", which
+/// is the pre-isolation default behavior.
+///
+/// The token is treated as opaque text: the first line, trimmed of
+/// surrounding whitespace, is what we emit. This handles the common
+/// pasted-from-`claude setup-token` shape where the user adds a trailing
+/// newline.
+fn read_oauth_token(path: &Path) -> Option<std::ffi::OsString> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    let line = raw.lines().next()?.trim();
+    if line.is_empty() {
+        return None;
+    }
+    Some(line.to_owned().into())
 }
 
 /// Returns a fatal diagnostic if the Claude Linux/WSL credential gate is
@@ -269,6 +320,65 @@ mod tests {
         let a = ClaudeAdapter;
         let r = a.validate(Path::new("/nonexistent-path-for-test"));
         assert!(r.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn plan_emits_oauth_token_when_file_present() {
+        let a = ClaudeAdapter;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("claude")).unwrap();
+        std::fs::write(root.join("claude/oauth_token"), "sk-ant-oat-abc123\n").unwrap();
+
+        let name = ProfileName::new("work").unwrap();
+        let home = abs(&["Users", "test"]);
+        let env = FakeEnvironment::new();
+        let plan = a.plan(&ctx(&name, &root, &home), &env).unwrap();
+
+        let token = plan
+            .env
+            .iter()
+            .find(|(k, _)| k == "CLAUDE_CODE_OAUTH_TOKEN")
+            .map(|(_, v)| v.clone());
+        assert_eq!(
+            token.as_deref().and_then(|v| v.to_str()),
+            Some("sk-ant-oat-abc123"),
+            "trailing newline should be stripped"
+        );
+    }
+
+    #[test]
+    fn plan_omits_oauth_token_when_file_absent() {
+        let a = ClaudeAdapter;
+        let dir = tempfile::tempdir().unwrap();
+        let name = ProfileName::new("work").unwrap();
+        let home = abs(&["Users", "test"]);
+        let env = FakeEnvironment::new();
+        let plan = a.plan(&ctx(&name, dir.path(), &home), &env).unwrap();
+
+        assert!(
+            plan.env.iter().all(|(k, _)| k != "CLAUDE_CODE_OAUTH_TOKEN"),
+            "no token file → no env var"
+        );
+    }
+
+    #[test]
+    fn plan_omits_oauth_token_for_empty_file() {
+        let a = ClaudeAdapter;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("claude")).unwrap();
+        std::fs::write(root.join("claude/oauth_token"), "   \n  \n").unwrap();
+
+        let name = ProfileName::new("work").unwrap();
+        let home = abs(&["Users", "test"]);
+        let env = FakeEnvironment::new();
+        let plan = a.plan(&ctx(&name, &root, &home), &env).unwrap();
+
+        assert!(
+            plan.env.iter().all(|(k, _)| k != "CLAUDE_CODE_OAUTH_TOKEN"),
+            "blank file → no env var"
+        );
     }
 
     #[test]

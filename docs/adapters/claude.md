@@ -31,13 +31,26 @@ Per [anthropics/claude-code#47661](https://github.com/anthropics/claude-code/iss
 
 The adapter detects this combination (Linux + offending file present + `DBUS_SESSION_BUS_ADDRESS` unset) and emits a `Diagnostic::Error`. The shim treats this as a fatal pre-exec block (exit code 3). Fix: `mv ~/.claude/.credentials.json ~/.claude/.credentials.json.maru-bak` and rerun.
 
-## macOS shared-Keychain credential storage (default)
+## Per-profile OAuth token (Keychain bypass)
 
-On macOS, Claude Code stores OAuth credentials in the system Keychain under the single shared service `Claude Safe Storage` / account `Claude Key`. **The Keychain entry is not keyed per-`CLAUDE_CONFIG_DIR`**, so credentials are not isolated per maru profile on macOS — logging out from one profile clears the entry that all profiles share.
+Claude Code's Keychain (macOS) and `.credentials.json` (Linux/Windows) are not reliably partitioned per-`CLAUDE_CONFIG_DIR` across the 2.1.x line — logging out under one maru profile can clear credentials shared by another. To guarantee per-profile credential isolation, the adapter exports the documented env-var escape hatch.
 
-File state (sessions, projects, settings, plugins, `.claude.json`) IS isolated per profile via `CLAUDE_CONFIG_DIR`; only the OAuth tokens leak across.
+**Mechanism:**
 
-See [`limitations.md`](../limitations.md#claude-on-macos-shared-keychain-credential-storage-default) for the workaround pattern. Conceptually upstream-tracked in [#47661](https://github.com/anthropics/claude-code/issues/47661); the structural fix would be a per-config-dir Keychain key.
+When `<profile_root>/claude/oauth_token` exists, the adapter reads its first non-blank line and emits `CLAUDE_CODE_OAUTH_TOKEN=<token>` in the activation plan. Per [Claude Code's auth precedence](https://code.claude.com/docs/en/authentication#authentication-precedence) (step 5), this env var wins over both `/login` Keychain credentials and `.credentials.json`. Claude Code authenticates with the env-var token and never touches the Keychain entry.
+
+**Setup:**
+
+```sh
+maru profile login work             # runs `claude setup-token` interactively
+# or: claude setup-token | maru profile login work --stdin
+```
+
+The token file is on the GENESIS §8 credential deny-list — `maru profile clone` / `export` / `import` exclude it.
+
+**`/logout` semantics under env-var auth:**
+
+When `CLAUDE_CODE_OAUTH_TOKEN` is set, `/logout` clears the Keychain entry that nothing in the maru flow uses. The token in env stays — you remain authenticated for that profile. To "log out" a maru profile in the env-var model, delete the token file: `rm "$MARU_HOME/profiles/<name>/claude/oauth_token"`.
 
 ## Carve-outs (still upstream bugs as of Claude Code 2.1.x)
 

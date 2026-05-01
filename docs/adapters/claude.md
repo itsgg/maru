@@ -31,6 +31,14 @@ Per [anthropics/claude-code#47661](https://github.com/anthropics/claude-code/iss
 
 The adapter detects this combination (Linux + offending file present + `DBUS_SESSION_BUS_ADDRESS` unset) and emits a `Diagnostic::Error`. The shim treats this as a fatal pre-exec block (exit code 3). Fix: `mv ~/.claude/.credentials.json ~/.claude/.credentials.json.maru-bak` and rerun.
 
+## macOS shared-Keychain credential storage (default)
+
+On macOS, Claude Code stores OAuth credentials in the system Keychain under the single shared service `Claude Safe Storage` / account `Claude Key`. **The Keychain entry is not keyed per-`CLAUDE_CONFIG_DIR`**, so credentials are not isolated per maru profile on macOS — logging out from one profile clears the entry that all profiles share.
+
+File state (sessions, projects, settings, plugins, `.claude.json`) IS isolated per profile via `CLAUDE_CONFIG_DIR`; only the OAuth tokens leak across.
+
+See [`limitations.md`](../limitations.md#claude-on-macos-shared-keychain-credential-storage-default) for the workaround pattern. Conceptually upstream-tracked in [#47661](https://github.com/anthropics/claude-code/issues/47661); the structural fix would be a per-config-dir Keychain key.
+
 ## Carve-outs (still upstream bugs as of Claude Code 2.1.x)
 
 | Issue | Description | Mitigation |

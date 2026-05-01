@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Documented the **macOS Claude Keychain isolation gap** in `docs/limitations.md` and `docs/adapters/claude.md`: Claude Code on macOS stores OAuth credentials in the system Keychain under a single shared service name (`Claude Safe Storage` / `Claude Key`), unkeyed by `CLAUDE_CONFIG_DIR`. Credentials are NOT isolated per maru profile on macOS by default; file state (sessions, projects, MCP, settings, plugins) is. Logging out under one profile clears the shared Keychain entry, so other profiles appear logged out too. Same shape as the existing Codex-keyring / Gemini-encrypted-storage carve-outs, but Claude does it by default with no opt-out env var.
+
 ## [0.1.0-alpha.4] - 2026-05-01
 
 ### Added

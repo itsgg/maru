@@ -40,6 +40,23 @@ Per Claude Code 2.1.x, the following carve-outs are still upstream issues, not m
 
 `maru doctor` flags these as carve-outs. When upstream fixes one, maru drops the corresponding warning in the same PR.
 
+### Claude on macOS: shared Keychain credential storage (default)
+
+On macOS, Claude Code stores OAuth credentials in the **system Keychain** under a single shared service name (`Claude Safe Storage` / account `Claude Key`) — one entry, regardless of `CLAUDE_CONFIG_DIR`. This means **Claude credentials are not isolated per maru profile on macOS**:
+
+- Logging in to Claude under one profile overwrites the Keychain entry that other profiles' Claude installs read from.
+- Logging out under one profile (e.g. via `/logout`) deletes the shared Keychain entry, so other profiles appear logged out too.
+
+`CLAUDE_CONFIG_DIR` only redirects *file* state (sessions, projects, settings, plugins). It cannot redirect macOS Keychain access — that's keyed by service name + account, not by directory.
+
+This is structurally the same as the Codex `keyring` and Gemini `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE` cases below, but Claude does it **by default** with no opt-out env var as of Claude Code 2.1.x. Tracked upstream conceptually in [anthropics/claude-code#47661](https://github.com/anthropics/claude-code/issues/47661) (Linux fallback to file storage); a per-`CLAUDE_CONFIG_DIR` Keychain key would be the structural fix.
+
+**Workaround until upstream offers per-config-dir Keychain isolation:**
+
+- Use the **same Claude account** across maru profiles (so the shared Keychain entry "just works"). The other Claude state (sessions, projects, MCP, settings, plugins) IS isolated per profile, which is still useful.
+- For different Claude accounts, log out before switching profiles — and accept that you'll re-authenticate on the next switch back. Painful, but honest.
+- On Linux/WSL2 without a D-Bus session, Claude falls through to file storage in `<CLAUDE_CONFIG_DIR>/.credentials.json`, which IS per-profile. The credential gate (#47661) blocks the *opposite* failure mode (real `~/.claude/.credentials.json` overriding the redirect).
+
 ### Codex: `keyring` storage mode
 
 If your `~/.codex/config.toml` enables OS-keyring storage for credentials, profile isolation breaks because keyring entries are not keyed per-`CODEX_HOME`. Phase 0 spike finding 0.5 disconfirmed the earlier-planned `[auth] storage = "file"` seed; per-platform behavior will be verified by a live-smoke nightly CI job once the user provisions the necessary credentials infrastructure (tracked in [`notes/phase-4-handoff.md`](notes/phase-4-handoff.md)) before any seed is reintroduced.

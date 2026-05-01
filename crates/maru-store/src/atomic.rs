@@ -93,4 +93,47 @@ mod tests {
         write_atomic(&path, b"deep").unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"deep");
     }
+
+    // ---- proptest: write_atomic is torn-write-free under concurrency ----
+
+    use proptest::collection::vec;
+    use proptest::prelude::{ProptestConfig, prop_assert, proptest};
+    use std::collections::BTreeSet;
+    use std::thread;
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 16,
+            ..ProptestConfig::default()
+        })]
+
+        /// Many threads call `write_atomic` against the same target with
+        /// distinct payloads. The final on-disk content must be exactly
+        /// one of the per-thread payloads — never a torn or mixed write.
+        #[test]
+        fn prop_concurrent_writes_never_torn(
+            payloads in vec(vec(0_u8..=255, 1..1024), 2..6),
+        ) {
+            let dir = tempfile::tempdir().unwrap();
+            let target = dir.path().join("contents.bin");
+
+            thread::scope(|scope| {
+                for p in &payloads {
+                    let target = &target;
+                    scope.spawn(move || {
+                        write_atomic(target, p).expect("write_atomic ok");
+                    });
+                }
+            });
+
+            let final_bytes = std::fs::read(&target).expect("file exists");
+            // The final bytes must equal exactly one of the inputs.
+            let inputs: BTreeSet<Vec<u8>> = payloads.into_iter().collect();
+            prop_assert!(
+                inputs.contains(&final_bytes),
+                "final file is neither of the inputs: {} bytes",
+                final_bytes.len(),
+            );
+        }
+    }
 }

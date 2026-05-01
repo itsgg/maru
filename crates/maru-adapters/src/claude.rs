@@ -152,12 +152,12 @@ const fn is_linux_or_wsl() -> bool {
 )]
 mod tests {
     use super::{ClaudeAdapter, linux_wsl_credential_gate};
+    #[cfg(target_os = "linux")]
+    use maru_core::Level;
     use maru_core::{
         AdapterError, Detection, FakeEnvironment, HarnessAdapter, HarnessId, ProfileContext,
         ProfileName,
     };
-    #[cfg(target_os = "linux")]
-    use maru_core::Level;
     use std::path::{Path, PathBuf};
 
     fn ctx<'a>(name: &'a ProfileName, root: &'a Path, home: &'a Path) -> ProfileContext<'a> {

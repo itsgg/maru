@@ -1,0 +1,24 @@
+[package]
+name        = "maru-activation"
+description = "Apply ActivationPlan env vars and exec the real harness binary."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+publish     = false
+
+[dependencies]
+maru-core = { path = "../maru-core" }
+thiserror = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# nix not in §13. We use std-only execvp via CString — see exec_unix.rs.
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

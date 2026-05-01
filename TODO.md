@@ -45,15 +45,11 @@ Plus a registry: `v1_adapters() -> Vec<Box<dyn HarnessAdapter>>` and `adapter_fo
 
 ## maru-activation
 
-- [ ] **1.22** — Apply `ActivationPlan.env` via `unsafe { std::env::set_var(...) }` _(GENESIS §11)_
-  - depends-on: 1.7
-  - acceptance: single-threaded application; unit tests verify env after call.
-- [ ] **1.23** — `which_skipping(arg0, our_install_dir)` _(GENESIS §9)_
-  - depends-on: —
-  - acceptance: skips entries under `our_install_dir`; returns first remaining match on PATH.
-- [ ] **1.24** — Unix `execvp` + Windows `CreateProcess` + wait _(GENESIS §9)_
-  - depends-on: 1.22, 1.23
-  - acceptance: behind cfg gates; tests via a fake target binary.
+- [x] **1.22** — `apply_env` (single `unsafe` block, documented invariant) + `compute_env` pure helper. _(GENESIS §11)_
+- [x] **1.23** — `resolve_real_binary` wraps `Environment::which_skipping` with typed `Error::BinaryNotFound`. _(GENESIS §9)_
+- [x] **1.24** — `exec_or_spawn` cfg-gated: Unix `Command::exec()` (never returns on success), Windows `Command::spawn()` + `wait()` returning child's exit code. _(GENESIS §9)_
+
+Plus `process_diagnostics` (Error→exit, Warn→stderr, Info→suppressed unless `MARU_LOG=debug`) and `build_argv` (arg0 + `args_prefix` + tail).
 
 ## maru-cli
 

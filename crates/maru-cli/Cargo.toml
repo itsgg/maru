@@ -30,6 +30,9 @@ directories  = { workspace = true }
 tar          = { workspace = true }
 flate2       = { workspace = true }
 tempfile     = { workspace = true }
+# `maru update` self-update (Phase 4 task 4.7). See GENESIS §13.
+ureq         = { workspace = true }
+self-replace = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

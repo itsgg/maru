@@ -92,6 +92,11 @@ which       = "7"
 tar    = "0.4"
 flate2 = "1"
 
+# Network / self-update — `maru update` only. Blocking HTTP via ureq; no async
+# surface introduced. See GENESIS §13 dep-budget justification.
+ureq         = { version = "3", default-features = false, features = ["rustls"] }
+self-replace = "1"
+
 # Dev / test
 assert_cmd  = "2"
 predicates  = "3"

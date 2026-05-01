@@ -553,6 +553,8 @@ A `.maru` file containing an unknown profile name causes the shim to exit 1 with
 | `tempfile`                      | store, tests                                           | Atomic writes, test isolation         |
 | `which`                         | adapters, cli                                          | Resolve real harness binaries         |
 | `tar`, `flate2`                 | cli                                                    | `export`/`import`                     |
+| `ureq`                          | cli                                                    | Blocking HTTP for `maru update`; no async surface introduced |
+| `self_replace`                  | cli                                                    | Atomic in-place binary replacement for `maru update` (cross-platform) |
 
 Dev-only:
 

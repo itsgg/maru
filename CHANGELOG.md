@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `maru update` self-update subcommand (Phase 4 task 4.7). Queries GitHub Releases API for the latest tag, compares against the compiled-in version, and atomically replaces the running binary via `self_replace`. `--check` prints the comparison and exits without side effects. Implementation: `crates/maru-cli/src/cmd/update.rs`. Adds `ureq` and `self-replace` workspace deps with GENESIS §13 justifications.
+- `.github/workflows/live-smoke.yml`: nightly job (04:00 UTC) running `scripts/live-smoke.sh` to exercise real `claude` / `codex` / `gemini` binaries against `CLAUDE_CONFIG_DIR` / `CODEX_HOME` / `GEMINI_CLI_HOME` redirections plus the Linux/WSL Claude credential gate. Gated on the `LIVE_SMOKE_ENABLED` repo Variable so it stays a no-op until the runner is provisioned. On failure, opens a tracking issue labelled `autopilot:live-smoke-failure`. Implements GENESIS §15 level 9; covers Phase 0 spike checks 0.2, 0.3, 0.7 deferred under `docs/spike-results.md`.
 - Initial repository scaffold: GENESIS.md (normative spec), README, CLAUDE.md, AGENTS.md, CONTRIBUTING.md, SECURITY.md.
 - Cargo workspace skeleton with `[workspace.lints]` (deny-dangerous / warn-safety-relevant / pedantic baseline) and shared `[workspace.dependencies]`.
 - Quality gates: `lefthook.yml` (pre-commit, pre-push, commit-msg), `deny.toml`, `clippy.toml`, `rustfmt.toml`, `_typos.toml`, `audit.toml`, `.markdownlint.yaml`, `.prettierrc`.

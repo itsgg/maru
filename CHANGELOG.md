@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-05-01
+
 ### Added
 
 - **Per-profile Claude OAuth isolation via `CLAUDE_CODE_OAUTH_TOKEN`.** Claude Code's Keychain entry is not reliably partitioned per `CLAUDE_CONFIG_DIR` across 2.1.x — logging out under one profile clears credentials shared with another. Fix: store a per-profile OAuth token at `<profile>/claude/oauth_token` (mode 0600); the Claude adapter exports it as `CLAUDE_CODE_OAUTH_TOKEN` at activation. Per Claude Code's auth precedence (step 5), env-var tokens win over Keychain — Claude Code never consults the shared entry when the file is present, giving each profile real credential isolation.
 - **`maru profile login <name>`** — wraps `claude setup-token`, captures the OAuth token from stdout, writes it to `<profile>/claude/oauth_token`. Use `--stdin` to pipe a pre-generated token (`claude setup-token | maru profile login work --stdin`).
 - `oauth_token` added to the GENESIS §8 credential deny-list — never copied by `maru profile clone` / `export` / `import`.
+
+### Fixed
+
+- `write_token_file` now `chmod`s to 0600 explicitly after writing. `OpenOptionsExt::mode` only applies on creation; truncating an existing 0644 file kept its old mode. The 0600 enforcement is now covered by an e2e test that pre-creates the file at 0644 and asserts the post-login mode.
 
 ## [0.1.0-alpha.4] - 2026-05-01
 

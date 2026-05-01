@@ -35,6 +35,172 @@ fn maru_cmd() -> TestCommand {
     TestCommand::cargo_bin("maru").expect("maru binary built")
 }
 
+#[cfg(unix)]
+#[test]
+fn profile_login_stdin_writes_token_with_0600_perms() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    let token_path = home
+        .path()
+        .join("profiles")
+        .join("work")
+        .join("claude")
+        .join("oauth_token");
+
+    // Pre-create the file with looser perms to verify the chmod fix:
+    // OpenOptionsExt::mode only applies on creation, so without an
+    // explicit chmod the existing 0644 perms would have leaked through.
+    std::fs::write(&token_path, "old\n").unwrap();
+    std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "login",
+            "work",
+            "--stdin",
+        ])
+        .write_stdin("sk-ant-oat-test-token\n")
+        .assert()
+        .success();
+
+    let contents = std::fs::read_to_string(&token_path).unwrap();
+    assert!(
+        contents.starts_with("sk-ant-oat-test-token"),
+        "stdin token should land in file, got {contents:?}"
+    );
+    let perms = std::fs::metadata(&token_path).unwrap().permissions();
+    assert_eq!(
+        perms.mode() & 0o777,
+        0o600,
+        "oauth_token must be mode 0600 even when overwriting an existing 0644 file"
+    );
+}
+
+#[test]
+fn profile_login_emits_oauth_token_in_dry_run() {
+    let home = tempfile::tempdir().unwrap();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "login",
+            "work",
+            "--stdin",
+        ])
+        .write_stdin("sk-ant-oat-fake\n")
+        .assert()
+        .success();
+
+    let dry_run = maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "run",
+            "--profile",
+            "work",
+            "--dry-run",
+            "--",
+            "claude",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(dry_run).unwrap();
+    assert!(
+        s.contains("CLAUDE_CODE_OAUTH_TOKEN"),
+        "activation plan must export CLAUDE_CODE_OAUTH_TOKEN: {s}"
+    );
+    assert!(
+        s.contains("sk-ant-oat-fake"),
+        "token value should be in the plan: {s}"
+    );
+}
+
+#[test]
+fn profile_clone_excludes_oauth_token() {
+    let home = tempfile::tempdir().unwrap();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "login",
+            "work",
+            "--stdin",
+        ])
+        .write_stdin("sk-ant-oat-secret\n")
+        .assert()
+        .success();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "clone",
+            "work",
+            "work-copy",
+        ])
+        .assert()
+        .success();
+
+    let src = home.path().join("profiles/work/claude/oauth_token");
+    let cloned = home.path().join("profiles/work-copy/claude/oauth_token");
+    assert!(src.exists(), "source token should remain");
+    assert!(
+        !cloned.exists(),
+        "clone must not carry the oauth_token (deny-list)"
+    );
+}
+
 #[test]
 fn profile_create_list_use_current() {
     let home = tempfile::tempdir().unwrap();

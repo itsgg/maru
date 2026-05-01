@@ -53,27 +53,15 @@ Plus `process_diagnostics` (Error→exit, Warn→stderr, Info→suppressed unles
 
 ## maru-cli
 
-- [ ] **1.25** — `clap` v4 derive surface for `profile create | list | use | current | delete | default | rename` _(GENESIS §8)_
-  - depends-on: 1.1, 1.3, 1.11
-  - acceptance: `--help` snapshot test passes.
-- [ ] **1.26** — `install` writes shim symlinks to `$MARU_HOME/bin/{claude,codex}` _(GENESIS §10)_
-  - depends-on: —
-  - acceptance: integration test creates the symlinks pointing at the shim binary.
-- [ ] **1.27** — `uninstall [--purge]` removes shims and (with --purge) `$MARU_HOME` _(GENESIS §8)_
-  - depends-on: 1.26
-  - acceptance: integration test verifies cleanup.
-- [ ] **1.28** — `doctor` checks PATH, shim, perms, harness binaries, carve-outs _(GENESIS §8)_
-  - depends-on: 1.18, 1.20
-  - acceptance: snapshot test on the human + JSON output.
-- [ ] **1.29** — `--persist-shell` rc-file write contract with sentinel block _(GENESIS §11)_
-  - depends-on: 1.26
-  - acceptance: idempotent rewrite; refuses if user hand-edited inside markers.
-- [ ] **1.30** — `version` and `schema` commands _(GENESIS §8)_
-  - depends-on: —
-  - acceptance: `schema` emits stable JSON schema; CI snapshot-tests it.
-- [ ] **1.31** — `run --profile <name> [--dry-run] -- <cmd>` _(GENESIS §8)_
-  - depends-on: 1.22
-  - acceptance: dry-run prints ActivationPlan as JSON; non-dry-run exec's the cmd.
+- [x] **1.25** — `clap` v4 derive surface: `profile {create, list, use, current, delete, default, rename}` + `adapter {list, status}`. _(GENESIS §8)_
+- [x] **1.26** — `install` writes shim symlinks to `$MARU_HOME/bin/{claude,codex,gemini}` + Windows `.cmd` shims; locates shim binary via `current_exe()` parent or PATH. _(GENESIS §10)_
+- [x] **1.27** — `uninstall [--purge]` removes shim dir, removes managed block from shell rc, optionally purges `$MARU_HOME`. _(GENESIS §8)_
+- [x] **1.28** — `doctor` checks PATH, shim install dir presence, on-PATH status, per-adapter binary detection, plus carve-out reminder notes. _(GENESIS §8)_
+- [x] **1.29** — Managed-block contract for shell rc with `# >>> maru managed block >>> ... # <<< maru managed block <<<` markers, idempotent rewrite, refuses on hand-edit detection. _(GENESIS §11)_
+- [x] **1.30** — `version` (text + JSON) and `schema` (stable JSON-schema for state.toml + every --json output, hand-rolled). _(GENESIS §8)_
+- [x] **1.31** — `run --profile <name> [--dry-run] -- <claude|codex|gemini> [args]`. dry-run emits ActivationPlan JSON; non-dry-run applies env + execs real binary via maru-activation. _(GENESIS §8)_
+
+End-to-end smoke verified locally: `maru profile create work --harness claude,codex && maru profile use work && maru run --profile work --dry-run -- claude` produces the GENESIS-correct ActivationPlan with both `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_PLUGIN_CACHE_DIR` (the §7.1 carve-out).
 
 ## maru-shim
 

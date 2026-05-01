@@ -24,6 +24,7 @@ use std::process::Command;
 use assert_cmd::Command as TestCommand;
 use predicates::prelude::*;
 
+#[cfg(unix)]
 fn fixture(name: &str) -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest.join("tests/fixtures").join(name)

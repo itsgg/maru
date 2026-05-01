@@ -77,18 +77,10 @@ Plus `process_diagnostics` (Error→exit, Warn→stderr, Info→suppressed unles
 
 ## maru-shim
 
-- [ ] **1.32** — Hand-rolled minimal reader for `state.toml` + `active.txt` _(GENESIS §9)_
-  - depends-on: —
-  - acceptance: shim crate has no `serde`, `toml`, `clap` deps (verified by `cargo tree -p maru-shim`).
-- [ ] **1.33** — `argv[0]` dispatch + profile resolution per §9 algorithm _(GENESIS §9)_
-  - depends-on: 1.32, 1.14
-  - acceptance: integration test runs against fake claude/codex scripts.
-- [ ] **1.34** — Apply env + Unix `execvp` / Windows `CreateProcess` _(GENESIS §9, §11)_
-  - depends-on: 1.33, 1.22
-  - acceptance: tests verify environment is forwarded to child.
-- [ ] **1.35** — Shim cold-start hyperfine benchmark in CI (macOS/Linux ≤ 15ms; Windows ≤ 40ms) _(GENESIS §9)_
-  - depends-on: 1.34
-  - acceptance: CI job (currently `if: false`) flipped on; budget enforced.
+- [x] **1.32** — Hand-rolled `extract_default_profile` (TOML subset for `[defaults].profile`) + `read_active_txt` (first-line) in `config.rs`. No serde/toml/clap deps. _(GENESIS §9)_
+- [x] **1.33** — `argv[0]` basename dispatch via `Harness::from_basename`; resolution chain `MARU_PROFILE > .maru > active.txt > [defaults].profile`. _(GENESIS §9)_
+- [x] **1.34** — `apply_env` (single unsafe block, documented invariant) + `which_skipping` with install-dir skip + Unix `Command::exec()` / Windows `Command::spawn()+wait()`. _(GENESIS §9, §11)_
+- [ ] **1.35** — Shim cold-start hyperfine benchmark in CI (macOS/Linux ≤ 15ms; Windows ≤ 40ms). depends-on: 1.34. CI job `bench-coldstart` already in `.github/workflows/ci.yml` behind `if: false`; flip after PR lands. _(GENESIS §9)_
 
 ## Tests + docs
 

@@ -7,6 +7,7 @@ members  = [
     "crates/maru-store",
     "crates/maru-adapters",
     "crates/maru-activation",
+    "crates/maru-shim",
 ]
 
 [workspace.package]

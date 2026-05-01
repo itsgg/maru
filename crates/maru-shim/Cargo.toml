@@ -1,0 +1,27 @@
+[package]
+name        = "maru-shim"
+description = "Hot-path shim binary. argv[0] dispatches to the right harness adapter."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+publish     = false
+
+# GENESIS §9: shim must depend only on `std` and `directories` (or `etcetera`).
+# Forbidden: clap, serde, serde_derive, serde_json, toml, tokio, anyhow,
+# tracing, reqwest. Hand-rolled minimal config reader for state.toml + active.txt.
+[dependencies]
+directories = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "maru-shim"
+path = "src/main.rs"
+
+[lints]
+workspace = true

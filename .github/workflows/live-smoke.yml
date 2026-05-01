@@ -1,0 +1,81 @@
+name: Live smoke
+
+# GENESIS §15 level 9: live smoke against real harness binaries with sealed
+# credentials, nightly. Phase 0 spike checks 0.2, 0.3, and 0.7 are deferred
+# to this job (see docs/spike-results.md and docs/limitations.md).
+#
+# Gated on the repo-level Variable LIVE_SMOKE_ENABLED to avoid spamming the
+# inbox with "no credentials" failures until the user provisions the runner.
+# Flip it on under Settings -> Secrets and variables -> Actions -> Variables.
+
+on:
+  schedule:
+    # 04:00 UTC daily.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Failures open a tracking issue.
+  issues: write
+
+concurrency:
+  group: live-smoke
+  cancel-in-progress: false
+
+jobs:
+  live-smoke:
+    if: ${{ vars.LIVE_SMOKE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build maru workspace (release)
+        run: cargo build --release --workspace
+
+      - name: Run live-smoke checks
+        run: bash scripts/live-smoke.sh
+
+      - name: Prepare failure issue body
+        if: failure()
+        run: |
+          mkdir -p .github/_issue
+          cat > .github/_issue/body.md <<'BODY'
+          The nightly `live-smoke` job failed on $(date -u +%Y-%m-%d).
+
+          - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Commit: ${{ github.sha }}
+
+          Phase 0 spike checks 0.2 (Claude carve-outs), 0.3 (Linux/WSL credential gate),
+          and 0.7 (Gemini keychain warning) are tracked here. See `docs/spike-results.md`
+          and `docs/limitations.md`.
+
+          Triage:
+          1. Inspect the failed step in the run above.
+          2. If a check disconfirms a GENESIS §7 assumption, open a spec PR before patching the script.
+          3. If upstream broke a redirection mechanism, file the upstream issue and add a row to GENESIS §7.1.
+          BODY
+
+      - name: Ensure failure label exists
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `|| true` because the label may already exist; we don't care.
+          gh label create autopilot:live-smoke-failure \
+            --description "Live-smoke nightly CI failure" \
+            --color B60205 \
+            --repo ${{ github.repository }} \
+            || true
+
+      - name: Open tracking issue on failure
+        if: failure()
+        uses: peter-evans/create-issue-from-file@v6
+        with:
+          title: "live-smoke: nightly failure on ${{ github.run_id }}"
+          content-filepath: .github/_issue/body.md
+          labels: autopilot:live-smoke-failure

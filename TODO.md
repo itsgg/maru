@@ -24,7 +24,9 @@ steps in `docs/notes/phase-4-handoff.md`.
 - [~] **4.4** — Scoop bucket: not enabled in dist 0.31.0; user submits manifest PR per release. Tracked in handoff.
 - [~] **4.5** — winget: not auto-submitted by dist 0.31.0. Use `wingetcreate update --submit` per release. Tracked in handoff.
 - [~] **4.6** — macOS notarization + Windows code signing: secret slots reserved in `release.yml`; **user-blocked** on cert provisioning. Releases without these slots ship unsigned.
-- [~] **4.7** — `maru update` self-update: **deferred** to v0.2. dist's installer scripts handle update via re-running the curl one-liner; a native `maru update` subcommand is more work than fits Phase 4 scope.
+- [x] **4.7** — `maru update` self-update: implemented in `crates/maru-cli/src/cmd/update.rs`. Queries GitHub Releases API via blocking `ureq`, atomic in-place replace via `self_replace`. `--check` prints latest vs current; bare `update` confirms (TTY-only unless `--yes`) then downloads and replaces. GENESIS §13 dep budget updated.
+
+  Phase 1 task 1.35 (`bench-coldstart` CI gate) was already wired in `.github/workflows/ci.yml` after PR #2; calling that out here for the audit trail.
 - [x] **4.8** — mdBook scaffolding at `docs/book/{book.toml,src/{SUMMARY.md,introduction.md,...symlinks}}`. `docs.yml` workflow builds + publishes to GitHub Pages on push to main.
 - [x] **4.9** — README updated with brew/scoop/winget/curl one-liners (labeled "after first release" until v0.1.0 ships).
 - [x] **4.10** — `docs/notes/dist-exit-plan.md` documents the `softprops/action-gh-release` matrix fallback if axodotdev/dist becomes unmaintained.

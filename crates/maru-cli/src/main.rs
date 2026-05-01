@@ -81,6 +81,9 @@ enum Command {
 
     /// Emit the stable JSON schema for `--json` outputs and `state.toml`.
     Schema,
+
+    /// Self-update via dist artifacts (Phase 4 task 4.7).
+    Update(cmd::update::UpdateArgs),
 }
 
 fn main() -> ExitCode {
@@ -105,6 +108,7 @@ fn main() -> ExitCode {
         Command::Uninstall(args) => cmd::install::run_uninstall(&ctx, args),
         Command::Version(args) => cmd::version::run(args),
         Command::Schema => cmd::schema::run(),
+        Command::Update(args) => cmd::update::run(args),
     };
 
     match result {

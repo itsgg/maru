@@ -263,6 +263,79 @@ fn run_executes_fake_codex_with_env() {
 }
 
 #[test]
+#[cfg(unix)]
+fn run_executes_fake_gemini_with_env() {
+    let home = tempfile::tempdir().unwrap();
+    let bin_dir = tempfile::tempdir().unwrap();
+    let dest = bin_dir.path().join("gemini");
+    std::fs::copy(fixture("fake-gemini.sh"), &dest).unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&dest).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&dest, perms).unwrap();
+    }
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "gemini",
+        ])
+        .assert()
+        .success();
+
+    let out = maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "run",
+            "--profile",
+            "work",
+            "--",
+            "gemini",
+        ])
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin:/usr/sbin:/sbin", bin_dir.path().display()),
+        )
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let s = String::from_utf8(out).unwrap();
+    assert!(s.contains("FAKE_GEMINI_CALLED"));
+    assert!(
+        s.contains(&format!(
+            "GEMINI_CLI_HOME={}/profiles/work/gemini",
+            home.path().display()
+        )),
+        "GEMINI_CLI_HOME mismatched: {s}"
+    );
+}
+
+#[test]
+fn adapter_list_includes_all_three_harnesses() {
+    let out = maru_cmd()
+        .args(["adapter", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    assert!(s.contains("claude"));
+    assert!(s.contains("codex"));
+    assert!(s.contains("gemini"));
+}
+
+#[test]
 fn delete_requires_force_for_activated_profile() {
     let home = tempfile::tempdir().unwrap();
     maru_cmd()

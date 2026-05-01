@@ -8,6 +8,8 @@
 
 pub mod active;
 pub mod atomic;
+pub mod copy;
+pub mod deny_list;
 pub(crate) mod lock;
 pub mod profile_dirs;
 pub mod resolve;

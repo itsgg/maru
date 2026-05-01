@@ -37,6 +37,10 @@ Thumbs.db
 # Claude Code (per-developer; team config lives in .claude/settings.json)
 .claude/settings.local.json
 .claude/.credentials.json
+.claude/scheduled_tasks.lock
 CLAUDE.local.md
+
+# mdBook build output
+docs/book/book/
 
 # Cargo lock is committed for binary workspaces. Don't ignore it.

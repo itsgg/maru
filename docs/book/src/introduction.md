@@ -22,7 +22,7 @@ Each agent stores its credentials, history, plugins, MCP servers, and settings u
 
 ## Status
 
-Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag triggers binary distribution (see [phase-4-handoff](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md)). The full design is in [GENESIS.md](https://github.com/itsgg/maru/blob/main/GENESIS.md), which is the normative source of truth.
+Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag triggers binary distribution (see [phase-4-handoff](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md)). The full design is in [GENESIS.md](https://github.com/itsgg/maru/blob/main/GENESIS.md), which is the normative source of truth. Architecture decision records live in [`docs/decisions/`](https://github.com/itsgg/maru/tree/main/docs/decisions).
 
 ## Source
 

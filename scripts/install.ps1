@@ -20,11 +20,27 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repo = 'itsgg/maru'
-$base = "https://github.com/$repo/releases/latest/download"
+$apiUrl = "https://api.github.com/repos/$repo/releases"
 
 function Write-Info($msg) {
     Write-Host "maru-installer: $msg"
 }
+
+# Find the latest release tag — including prereleases. The
+# `/releases/latest` endpoint excludes prereleases and returns 404
+# while we're alpha; the list endpoint returns all releases newest first.
+function Get-LatestTag {
+    $headers = @{ 'Accept' = 'application/vnd.github+json' }
+    $releases = Invoke-RestMethod -Uri "$apiUrl?per_page=1" -Headers $headers -UseBasicParsing
+    if ($releases.Count -eq 0) {
+        throw "no releases found at $apiUrl"
+    }
+    return $releases[0].tag_name
+}
+
+$tag = Get-LatestTag
+Write-Info "latest release: $tag"
+$base = "https://github.com/$repo/releases/download/$tag"
 
 function Invoke-PerBinaryInstaller($label, $url) {
     Write-Info "running $label installer"

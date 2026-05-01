@@ -17,7 +17,7 @@
 set -eu
 
 REPO="itsgg/maru"
-RELEASES_BASE="https://github.com/${REPO}/releases/latest/download"
+API_URL="https://api.github.com/repos/${REPO}/releases"
 
 NO_SHELL_RC=""
 for arg in "$@"; do
@@ -39,6 +39,25 @@ require() {
 require curl
 require sh
 
+# Find the latest release tag — including prereleases. The
+# `/releases/latest` endpoint excludes prereleases and returns 404
+# while we're alpha; the list endpoint returns all releases newest
+# first.
+find_latest_tag() {
+    curl -sSfL -H "Accept: application/vnd.github+json" "${API_URL}?per_page=1" \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
+        | head -n 1
+}
+
+TAG="$(find_latest_tag)"
+if [ -z "$TAG" ]; then
+    printf 'maru-installer: could not determine latest release tag from %s\n' "$API_URL" >&2
+    exit 1
+fi
+log "latest release: ${TAG}"
+
+DOWNLOAD_BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
 run_installer() {
     label="$1"
     url="$2"
@@ -47,8 +66,8 @@ run_installer() {
     curl -sSfL "$url" | sh
 }
 
-run_installer "maru-cli" "${RELEASES_BASE}/maru-cli-installer.sh"
-run_installer "maru-shim" "${RELEASES_BASE}/maru-shim-installer.sh"
+run_installer "maru-cli" "${DOWNLOAD_BASE}/maru-cli-installer.sh"
+run_installer "maru-shim" "${DOWNLOAD_BASE}/maru-shim-installer.sh"
 
 # Both installers drop binaries into $CARGO_HOME/bin (defaults to
 # $HOME/.cargo/bin); make sure that's on PATH for this shell so the

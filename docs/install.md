@@ -2,6 +2,8 @@
 
 `maru` ships as two binaries — `maru` (the CLI) and `maru-shim` (the hot path that intercepts `claude` / `codex` / `gemini` invocations). The installers below place both side-by-side and run `maru install` to wire the per-harness shims into `$MARU_HOME/bin`.
 
+> **Heads-up for macOS users.** Until the binaries are notarized (tracked in [`notes/phase-4-handoff.md`](notes/phase-4-handoff.md)), the **first** invocation of `maru` or `maru-shim` on macOS Sequoia (15+) sits for 30 s – 2 min while the system's `syspolicy` daemon does an online verification against Apple's servers. Every run after that is ~5 ms. **It is not hung.** The wait happens once per binary, then never again.
+
 ## Prerequisites
 
 - One or more of the supported harness CLIs already on PATH: [`claude`](https://docs.claude.com/en/docs/claude-code), [`codex`](https://developers.openai.com/codex), [`gemini`](https://github.com/google-gemini/gemini-cli).
@@ -160,7 +162,8 @@ You'll need to add `$MARU_HOME/bin` to PATH yourself.
 
 ## Troubleshooting
 
-- **`could not locate the maru-shim binary`** → you installed `maru` but not `maru-shim`. Install both packages (see the steps above) and re-run `maru install`.
+- **`maru install` appears to hang for 30 s – 2 min on macOS, then completes** → that's macOS Sequoia's `syspolicy` daemon doing a one-time online verification of an unsigned binary. The Homebrew formula pre-warms this during `brew install`, so subsequent `maru install` runs should be fast (~5 ms). For curl-installed binaries, the first invocation pays the cost. The fix is proper code-signing + notarization — tracked in [`notes/phase-4-handoff.md`](notes/phase-4-handoff.md) (`APPLE_TEAM_ID` / `APPLE_NOTARY_USER` / `APPLE_NOTARY_PASSWORD` secrets).
+- **`could not locate the maru-shim binary`** → you installed `maru` but not `maru-shim`. The wrappers and Homebrew formula install both; if you ran the dist installer scripts manually, run both (see [Manual install](#manual-install-skip-the-wrapper)).
 - **`maru: error: ...not found on PATH`** → run `maru doctor` to see what's missing.
 - **`brew install`-installed claude not picked up by the shim** → the shim's job is to BE `claude` on your PATH. After `maru install`, `which claude` should return `$MARU_HOME/bin/claude`. If it returns the brew path, your shell rc edit didn't take effect — open a new terminal.
 - **VS Code / Cursor extension still uses the old config** → expected. The Anthropic Claude VS Code extension and the Codex VS Code extension don't inherit env from your shell rc. See [`limitations.md`](limitations.md).

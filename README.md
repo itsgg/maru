@@ -17,7 +17,7 @@ gemini        # uses the work Gemini config
 
 ## Status
 
-Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag triggers binary distribution (see [phase-4-handoff](docs/notes/phase-4-handoff.md)). The full design is in [GENESIS.md](./GENESIS.md), which is the normative source of truth for the implementation.
+Phases 0–4 are merged on `main`. Pre-1.0 alpha; binaries ship to GitHub Releases via [`dist`](https://github.com/axodotdev/cargo-dist). The full design is in [GENESIS.md](./GENESIS.md), which is the normative source of truth for the implementation. Manual setup notes for maintainers are in [`docs/notes/phase-4-handoff.md`](docs/notes/phase-4-handoff.md).
 
 ## Install
 

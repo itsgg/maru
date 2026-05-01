@@ -948,7 +948,7 @@ fn version_json() {
         .stdout
         .clone();
     let s = String::from_utf8(out).unwrap();
-    assert!(s.contains("\"name\": \"maru-cli\""), "missing name: {s}");
+    assert!(s.contains("\"name\": \"maru\""), "missing name: {s}");
     assert!(s.contains("\"version\""), "missing version: {s}");
 }
 

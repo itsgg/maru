@@ -18,8 +18,11 @@ struct VersionOutput {
 }
 
 pub fn run(args: VersionArgs) -> Result<()> {
+    // The package name is `maru-cli` (the crate); the binary is `maru`.
+    // User-facing output uses the binary name for consistency with
+    // `maru --version` (clap default) and the `which maru` they typed.
     let out = VersionOutput {
-        name: env!("CARGO_PKG_NAME"),
+        name: "maru",
         version: env!("CARGO_PKG_VERSION"),
         rust_version: env!("CARGO_PKG_RUST_VERSION"),
     };

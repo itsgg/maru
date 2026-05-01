@@ -14,7 +14,7 @@ Each agent stores its credentials, history, plugins, MCP servers, and settings u
 
 ## What's in this book
 
-- **[Install](install.md)** — install from source today; binary distribution lands in v1.0 via Homebrew tap, Scoop bucket, winget, and `curl | sh`.
+- **[Install](install.md)** — Homebrew, curl, PowerShell, or build from source.
 - **[Quickstart](quickstart.md)** — five minutes from zero to two profiles.
 - **[Limitations](limitations.md)** — what `maru` v1 doesn't cover (IDE extension hosts, certain upstream carve-outs).
 - **[direnv integration](direnv.md)** — pin profiles to directories alongside `.envrc`.
@@ -22,7 +22,7 @@ Each agent stores its credentials, history, plugins, MCP servers, and settings u
 
 ## Status
 
-Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag triggers binary distribution (see [phase-4-handoff](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md)). The full design is in [GENESIS.md](https://github.com/itsgg/maru/blob/main/GENESIS.md), which is the normative source of truth. Architecture decision records live in [`docs/decisions/`](https://github.com/itsgg/maru/tree/main/docs/decisions).
+Phases 0–4 are merged on `main`. Pre-1.0 alpha; binaries ship to GitHub Releases via [`dist`](https://github.com/axodotdev/cargo-dist). Scoop and winget channels are reserved but not yet wired (see [phase-4-handoff](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md)). The full design is in [GENESIS.md](https://github.com/itsgg/maru/blob/main/GENESIS.md), which is the normative source of truth. Architecture decision records live in [`docs/decisions/`](https://github.com/itsgg/maru/tree/main/docs/decisions).
 
 ## Source
 

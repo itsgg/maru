@@ -19,7 +19,9 @@ use serde::Deserialize;
 
 use crate::CliError;
 
-const RELEASES_API_URL: &str = "https://api.github.com/repos/itsgg/maru/releases/latest";
+// `/releases/latest` excludes prereleases and 404s while we're alpha;
+// the list endpoint returns all releases newest first.
+const RELEASES_API_URL: &str = "https://api.github.com/repos/itsgg/maru/releases?per_page=1";
 // GitHub recommends a descriptive User-Agent for API requests.
 const USER_AGENT: &str = concat!("maru/", env!("CARGO_PKG_VERSION"), " (self-update)");
 
@@ -59,7 +61,7 @@ enum VersionCheck {
 
 pub fn run(args: UpdateArgs) -> Result<()> {
     let body = fetch_latest_release_body()?;
-    let release = parse_release(&body).context("parse GitHub /releases/latest response")?;
+    let release = parse_release(&body).context("parse GitHub /releases response")?;
 
     let current = env!("CARGO_PKG_VERSION");
     let check = compare_versions(&release.tag_name, current);
@@ -116,8 +118,9 @@ pub fn run(args: UpdateArgs) -> Result<()> {
     Ok(())
 }
 
-/// Issue the GET against the GitHub releases API and return the body bytes
-/// as a UTF-8 string. Returns a friendly error when there are no releases.
+/// Issue the GET against the GitHub releases list API and return the body
+/// bytes as a UTF-8 string. The list endpoint (vs `/releases/latest`)
+/// returns prereleases too — necessary while we're still in alpha.
 fn fetch_latest_release_body() -> Result<String> {
     let response = ureq::get(RELEASES_API_URL)
         .header("User-Agent", USER_AGENT)
@@ -129,21 +132,23 @@ fn fetch_latest_release_body() -> Result<String> {
             let body = r
                 .body_mut()
                 .read_to_string()
-                .context("read GitHub /releases/latest response body")?;
+                .context("read GitHub /releases response body")?;
             Ok(body)
         }
-        Err(ureq::Error::StatusCode(404)) => Err(CliError::user(
-            "no releases published yet for itsgg/maru. \
-                 First release ships during Phase 4 wrap-up.",
-        )
-        .into()),
-        Err(e) => Err(e).context("GET https://api.github.com/repos/itsgg/maru/releases/latest"),
+        Err(e) => Err(e).context("GET https://api.github.com/repos/itsgg/maru/releases"),
     }
 }
 
-/// Parse a /releases/latest JSON body. Public-in-crate so tests can reach it.
-fn parse_release(body: &str) -> Result<GhRelease, serde_json::Error> {
-    serde_json::from_str(body)
+/// Parse a `/releases?per_page=1` JSON body (an array). Returns the first
+/// release, which is the most recent (GitHub orders newest first).
+/// Public-in-crate so tests can reach it.
+fn parse_release(body: &str) -> Result<GhRelease> {
+    let releases: Vec<GhRelease> =
+        serde_json::from_str(body).map_err(|e| anyhow!("parse releases array: {e}"))?;
+    releases
+        .into_iter()
+        .next()
+        .ok_or_else(|| CliError::user("no releases published yet for itsgg/maru.").into())
 }
 
 /// Compare the GitHub tag (e.g. `v0.1.0`) against `env!("CARGO_PKG_VERSION")`.
@@ -283,14 +288,14 @@ fn replace_running_binary(new_binary: &std::path::Path) -> Result<()> {
 mod tests {
     use super::*;
 
-    /// Captured (trimmed) GitHub /releases/latest response. The fields outside
-    /// our subset are harmless; serde ignores them.
-    const SAMPLE_RELEASE: &str = r#"{
+    /// Captured (trimmed) GitHub `/releases?per_page=1` response — an
+    /// array. Fields outside our subset are harmless; serde ignores them.
+    const SAMPLE_RELEASE: &str = r#"[{
         "url": "https://api.github.com/repos/itsgg/maru/releases/123",
         "tag_name": "v0.2.0",
         "name": "v0.2.0",
         "draft": false,
-        "prerelease": false,
+        "prerelease": true,
         "assets": [
             {
                 "name": "maru-aarch64-apple-darwin.tar.gz",
@@ -303,7 +308,7 @@ mod tests {
                 "size": 1234
             }
         ]
-    }"#;
+    }]"#;
 
     #[test]
     fn parses_minimal_release_body() {
@@ -311,6 +316,12 @@ mod tests {
         assert_eq!(release.tag_name, "v0.2.0");
         assert_eq!(release.assets.len(), 2);
         assert_eq!(release.assets[0].name, "maru-aarch64-apple-darwin.tar.gz");
+    }
+
+    #[test]
+    fn parses_empty_releases_array_as_no_releases_error() {
+        let err = parse_release("[]").unwrap_err();
+        assert!(err.to_string().contains("no releases published"));
     }
 
     #[test]

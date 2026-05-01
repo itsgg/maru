@@ -34,6 +34,8 @@ iwr https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.ps1 | iex
 
 Each command installs both binaries (`maru` + `maru-shim`) and wires the per-harness shims (claude/codex/gemini) into your PATH.
 
+> **macOS users — first run is slow.** Until the binaries are notarized, the first invocation of `maru` or `maru-shim` on macOS Sequoia (15+) sits for 30 s – 2 min while `syspolicy` does an online verification with Apple's servers. Every run after that is ~5 ms. **It is not hung.** Tracked in [`docs/notes/phase-4-handoff.md`](docs/notes/phase-4-handoff.md).
+
 Scoop and winget channels are reserved (`itsgg/scoop-maru`, `itsgg.maru`) but not yet wired up — see [`docs/notes/phase-4-handoff.md`](docs/notes/phase-4-handoff.md). Use the PowerShell installer on Windows for now.
 
 Full instructions and a from-source path are in [`docs/install.md`](docs/install.md).

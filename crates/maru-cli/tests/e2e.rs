@@ -18,6 +18,7 @@
     reason = "tests"
 )]
 
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::process::Command;
 

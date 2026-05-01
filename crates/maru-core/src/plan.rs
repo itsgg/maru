@@ -83,6 +83,7 @@ impl ActivationPlan {
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
+    clippy::arithmetic_side_effects,
     reason = "tests"
 )]
 mod tests {
@@ -115,5 +116,89 @@ mod tests {
             .with_diagnostic(Diagnostic::warn("nuance"))
             .with_diagnostic(Diagnostic::error("nope"));
         assert!(p.has_errors());
+    }
+
+    // ---- proptest: ActivationPlan invariants (GENESIS §15 level 2) ----
+
+    use crate::Level;
+    use proptest::collection::vec;
+    use proptest::prelude::{Just, ProptestConfig, Strategy, prop_assert_eq, prop_oneof, proptest};
+    use std::ffi::OsString;
+
+    fn level_strategy() -> impl Strategy<Value = Level> {
+        prop_oneof![Just(Level::Info), Just(Level::Warn), Just(Level::Error),]
+    }
+
+    fn diagnostic_strategy() -> impl Strategy<Value = Diagnostic> {
+        (level_strategy(), ".{0,32}", proptest::option::of(".{0,32}")).prop_map(
+            |(level, message, help)| Diagnostic {
+                level,
+                message,
+                help,
+            },
+        )
+    }
+
+    fn env_pair_strategy() -> impl Strategy<Value = (OsString, OsString)> {
+        ("[A-Z_]{1,16}", ".{0,32}").prop_map(|(k, v)| (OsString::from(k), OsString::from(v)))
+    }
+
+    fn plan_strategy() -> impl Strategy<Value = ActivationPlan> {
+        (
+            vec(env_pair_strategy(), 0..8),
+            vec(".{0,16}", 0..4).prop_map(|v| v.into_iter().map(OsString::from).collect()),
+            vec(diagnostic_strategy(), 0..8),
+        )
+            .prop_map(|(env, args_prefix, diagnostics)| ActivationPlan {
+                env,
+                args_prefix,
+                diagnostics,
+            })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 64, .. ProptestConfig::default() })]
+
+        /// `has_errors()` is `true` iff at least one diagnostic is `Level::Error`.
+        #[test]
+        fn prop_has_errors_iff_any_error_diagnostic(plan in plan_strategy()) {
+            let any_error = plan.diagnostics.iter().any(|d| d.level == Level::Error);
+            prop_assert_eq!(plan.has_errors(), any_error);
+        }
+
+        /// Cloning a plan yields a `PartialEq`-equal plan.
+        ///
+        /// `ActivationPlan` doesn't implement `PartialEq` directly, so we
+        /// compare each public field for structural equality.
+        #[test]
+        fn prop_clone_is_structurally_equal(plan in plan_strategy()) {
+            let copy = plan.clone();
+            prop_assert_eq!(&plan.env, &copy.env);
+            prop_assert_eq!(&plan.args_prefix, &copy.args_prefix);
+            prop_assert_eq!(&plan.diagnostics, &copy.diagnostics);
+        }
+
+        /// `with_env` is append-only: the resulting `env` length is exactly one
+        /// greater than before, and the appended pair is the last entry.
+        #[test]
+        fn prop_with_env_appends(plan in plan_strategy(), pair in env_pair_strategy()) {
+            let before_len = plan.env.len();
+            let (key, value) = pair;
+            let next = plan.with_env(key.clone(), value.clone());
+            prop_assert_eq!(next.env.len(), before_len + 1);
+            let last = next.env.last().expect("just appended");
+            prop_assert_eq!(&last.0, &key);
+            prop_assert_eq!(&last.1, &value);
+        }
+
+        /// `with_diagnostic` is append-only: length grows by exactly 1 and the
+        /// appended diagnostic is last.
+        #[test]
+        fn prop_with_diagnostic_appends(plan in plan_strategy(), d in diagnostic_strategy()) {
+            let before_len = plan.diagnostics.len();
+            let next = plan.with_diagnostic(d.clone());
+            prop_assert_eq!(next.diagnostics.len(), before_len + 1);
+            prop_assert_eq!(next.diagnostics.last(), Some(&d));
+        }
     }
 }

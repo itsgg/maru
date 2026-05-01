@@ -12,14 +12,19 @@ use std::path::{Path, PathBuf};
 /// - `MARU_HOME` env var if set.
 /// - Otherwise: `$XDG_DATA_HOME/maru` on Linux, `~/Library/Application
 ///   Support/maru` on macOS, `%LOCALAPPDATA%\maru` on Windows.
+///
+/// Uses `BaseDirs::data_local_dir().join("maru")` — that gives the
+/// spec-correct path on every platform. (The earlier
+/// `ProjectDirs::from("dev","maru","maru")` produced `dev.maru.maru` on
+/// macOS, contradicting GENESIS §3.)
 pub fn maru_home() -> Option<PathBuf> {
     if let Some(v) = std::env::var_os("MARU_HOME")
         && !v.is_empty()
     {
         return Some(PathBuf::from(v));
     }
-    let dirs = directories::ProjectDirs::from("dev", "maru", "maru")?;
-    Some(dirs.data_dir().to_path_buf())
+    let dirs = directories::BaseDirs::new()?;
+    Some(dirs.data_local_dir().join("maru"))
 }
 
 /// Read the first non-empty trimmed line of `<maru_home>/active.txt`.

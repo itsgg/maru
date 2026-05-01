@@ -134,9 +134,15 @@ fn resolve_maru_home(override_path: Option<PathBuf>) -> Result<PathBuf> {
     if let Some(p) = override_path {
         return Ok(p);
     }
-    let dirs = directories::ProjectDirs::from("dev", "maru", "maru")
-        .context("could not derive default $MARU_HOME via `directories`")?;
-    Ok(dirs.data_dir().to_path_buf())
+    // GENESIS §3 spec: ~/Library/Application Support/maru on macOS,
+    // $XDG_DATA_HOME/maru on Linux, %LOCALAPPDATA%\maru on Windows.
+    // BaseDirs::data_local_dir() gives the right base on every platform
+    // (matches data_dir on macOS/Linux; LOCALAPPDATA on Windows). The
+    // earlier `ProjectDirs::from("dev","maru","maru")` produced
+    // `dev.maru.maru` on macOS, which contradicted the spec.
+    let dirs = directories::BaseDirs::new()
+        .context("could not derive default $MARU_HOME via `directories::BaseDirs`")?;
+    Ok(dirs.data_local_dir().join("maru"))
 }
 
 /// CLI-side error with a GENESIS §8 exit code. Wrap in `anyhow::Error`

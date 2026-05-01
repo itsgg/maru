@@ -2,7 +2,14 @@
 # `maru-core` is a Phase 1 scaffold so cargo commands have a valid target.
 [workspace]
 resolver = "3"
-members  = ["crates/maru-core"]
+members  = [
+    "crates/maru-core",
+    "crates/maru-store",
+    "crates/maru-adapters",
+    "crates/maru-activation",
+    "crates/maru-shim",
+    "crates/maru-cli",
+]
 
 [workspace.package]
 version       = "0.0.0"
@@ -58,6 +65,7 @@ module_name_repetitions = "allow"
 must_use_candidate      = "allow"
 missing_errors_doc      = "allow"
 missing_panics_doc      = "allow"
+multiple_crate_versions = "allow"   # transitive dep duplicates outside our control
 
 # Pinned versions for shared deps. See GENESIS §13 for the dependency budget.
 # Member crates use these via `<dep> = { workspace = true }`.
@@ -70,7 +78,7 @@ thiserror   = "2"
 anyhow      = "1"
 
 # CLI / logging
-clap                 = { version = "4", features = ["derive"] }
+clap                 = { version = "4", features = ["derive", "env"] }
 tracing              = "0.1"
 tracing-subscriber   = { version = "0.3", features = ["env-filter", "json"] }
 

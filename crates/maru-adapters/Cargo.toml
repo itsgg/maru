@@ -1,6 +1,6 @@
 [package]
-name        = "maru-core"
-description = "Pure domain types and traits for the maru profile manager."
+name        = "maru-adapters"
+description = "Per-harness adapter implementations for maru."
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
@@ -11,11 +11,10 @@ authors.workspace      = true
 publish     = false
 
 [dependencies]
-serde     = { workspace = true }
-thiserror = { workspace = true }
+maru-core = { path = "../maru-core" }
 
 [dev-dependencies]
-serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

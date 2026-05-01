@@ -1,0 +1,37 @@
+[package]
+name        = "maru-cli"
+description = "The `maru` profile-manager binary."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+publish     = false
+
+[[bin]]
+name = "maru"
+path = "src/main.rs"
+
+[dependencies]
+maru-core       = { path = "../maru-core" }
+maru-store      = { path = "../maru-store" }
+maru-adapters   = { path = "../maru-adapters" }
+maru-activation = { path = "../maru-activation" }
+
+clap         = { workspace = true }
+anyhow       = { workspace = true }
+thiserror    = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+tracing-subscriber = { workspace = true }
+directories  = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 [package]
-name        = "maru-core"
-description = "Pure domain types and traits for the maru profile manager."
+name        = "maru-activation"
+description = "Apply ActivationPlan env vars and exec the real harness binary."
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
@@ -11,11 +11,14 @@ authors.workspace      = true
 publish     = false
 
 [dependencies]
-serde     = { workspace = true }
+maru-core = { path = "../maru-core" }
 thiserror = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+# nix not in §13. We use std-only execvp via CString — see exec_unix.rs.
+
 [dev-dependencies]
-serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

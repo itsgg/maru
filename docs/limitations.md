@@ -50,7 +50,7 @@ The fix maru ships: per-profile OAuth tokens via the `CLAUDE_CODE_OAUTH_TOKEN` e
 
 ```sh
 maru profile create work --harness claude
-maru profile login work             # wraps `claude setup-token`; pastes the token into <profile>/claude/oauth_token
+maru profile login work             # runs `claude setup-token`, prompts you to paste the printed token, saves it to <profile>/claude/oauth_token
 maru profile use work
 claude                              # authenticates with the work-profile token, ignoring Keychain
 ```

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-05-01
+
+### Fixed
+
+- `maru profile login` no longer pipes `claude setup-token`'s stdout. The previous capture broke Claude Code's TUI (the splash re-rendered repeatedly when stdout was a pipe), and the "last non-empty line" extraction reliably grabbed the hint line `Use this token by setting: export CLAUDE_CODE_OAUTH_TOKEN=<token>` (literal placeholder) instead of the actual token below it — so the saved token was invalid and Claude Code silently fell back to the OAuth flow on next launch. Now `setup-token` runs with full stdio inheritance (the TUI works normally), and after it exits, the user is prompted to paste the printed token. The `--stdin` mode is unchanged for piped / scripted use.
+
 ## [0.1.0-alpha.6] - 2026-05-01
 
 ### Added

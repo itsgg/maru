@@ -22,7 +22,7 @@ This creates `$MARU_HOME/profiles/work/{claude,codex}/` and registers the profil
 ## 2. Authenticate Claude (per-profile)
 
 ```sh
-maru profile login work             # wraps `claude setup-token`; saves to <profile>/claude/oauth_token
+maru profile login work             # runs `claude setup-token`; paste the printed token when prompted; saves to <profile>/claude/oauth_token
 ```
 
 This is the maru-recommended way to give a profile its own Claude credentials. The adapter exports the saved token via `CLAUDE_CODE_OAUTH_TOKEN` at activation, which bypasses Claude's shared-Keychain problem and gives each profile real OAuth isolation. See [`adapters/claude.md`](adapters/claude.md#per-profile-oauth-token-keychain-bypass) for details. Codex authenticates on first launch (step 3); Gemini too.

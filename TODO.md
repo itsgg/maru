@@ -26,27 +26,13 @@ Exit criteria (from GENESIS §14):
 
 ## maru-store
 
-- [ ] **1.11** — `state.toml` r/w with `schema_version = 1` _(GENESIS §10)_
-  - depends-on: 1.3
-  - acceptance: round-trip serialize/deserialize a sample state matching the §10 schema.
-- [ ] **1.12** — Atomic write-temp-rename + `fd-lock` advisory lock _(GENESIS §10)_
-  - depends-on: 1.11
-  - acceptance: property tests verify concurrent writers don't tear `state.toml`.
-- [ ] **1.13** — `active.txt` r/w with empty-line tolerance _(GENESIS §10)_
-  - depends-on: —
-  - acceptance: read returns `Option<ProfileName>`; write is atomic.
-- [ ] **1.14** — `[defaults].profile` resolution per §10 table _(GENESIS §10)_
-  - depends-on: 1.11
-  - acceptance: resolves env > .maru > active.txt > defaults; returns None if all empty.
-- [ ] **1.15** — `ensure_profile_dirs(profile_root, &harnesses)` _(GENESIS §11)_
-  - depends-on: 1.3
-  - acceptance: idempotent mkdir -p for each adapter's profile_subdir.
-- [ ] **1.16** — `SeedFile` writer with shallow TOML merge _(GENESIS §11)_
-  - depends-on: 1.8
-  - acceptance: never overwrites a user-set value; merges shallowly into existing tables.
-- [ ] **1.17** — `state.toml` snapshot before destructive ops, under `backups/<iso>/` _(GENESIS §10)_
-  - depends-on: 1.11
-  - acceptance: `delete` and `import` snapshot first; tests verify the snapshot file exists.
+- [x] **1.11** — `State` schema (`schema_version=1`, `[profiles]`, `[defaults]`) + `read`/`write` with version-rejection on unknown major. _(GENESIS §10)_
+- [x] **1.12** — Atomic write-temp-rename via `tempfile::NamedTempFile::persist` + `fd-lock` closure-based `with_write_lock`. _(GENESIS §10)_
+- [x] **1.13** — `active.txt` r/w with first-non-empty-line semantics + invalid-name fallthrough. _(GENESIS §10)_
+- [x] **1.14** — `resolve()` chain: env > `.maru` walk-from-cwd > `active.txt` > `[defaults].profile`. `Resolved { name, source }`. _(GENESIS §10)_
+- [x] **1.15** — `ensure_profile_dirs(profile_root, &harnesses)` idempotent + `profile_subdir(HarnessId)` mapping. _(GENESIS §11)_
+- [x] **1.16** — `apply_seed` / `apply_seeds` with `OverwriteIfMissing` (idempotent) and `TomlMergeShallow` (existing keys win). _(GENESIS §11)_
+- [x] **1.17** — `snapshot_state` to `backups/<iso-8601>/state.toml`, no-op if state missing, `:` replaced with `-` for Windows safety. _(GENESIS §10)_
 
 ## maru-adapters
 

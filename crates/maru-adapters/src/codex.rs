@@ -110,6 +110,15 @@ mod tests {
         }
     }
 
+    fn abs(parts: &[&str]) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("maru-test");
+        for part in parts {
+            p.push(part);
+        }
+        p
+    }
+
     #[test]
     fn metadata() {
         let a = CodexAdapter;
@@ -122,15 +131,15 @@ mod tests {
     fn plan_emits_codex_home_only() {
         let a = CodexAdapter;
         let name = ProfileName::new("work").unwrap();
-        let root = PathBuf::from("/maru/profiles/work");
-        let home = PathBuf::from("/Users/test");
+        let root = abs(&["maru", "profiles", "work"]);
+        let home = abs(&["Users", "test"]);
         let env = FakeEnvironment::new();
         let plan = a.plan(&ctx(&name, &root, &home), &env).unwrap();
 
         assert_eq!(plan.env.len(), 1, "Codex emits exactly one env var in v1");
         let (key, value) = plan.env.first().unwrap();
         assert_eq!(key, "CODEX_HOME");
-        assert_eq!(value, "/maru/profiles/work/codex");
+        assert_eq!(value, root.join("codex").as_os_str());
         assert!(plan.diagnostics.is_empty());
     }
 
@@ -139,7 +148,7 @@ mod tests {
         let a = CodexAdapter;
         let name = ProfileName::new("work").unwrap();
         let root = PathBuf::from("relative/root");
-        let home = PathBuf::from("/Users/test");
+        let home = abs(&["Users", "test"]);
         let env = FakeEnvironment::new();
         let err = a.plan(&ctx(&name, &root, &home), &env).unwrap_err();
         assert!(matches!(err, AdapterError::NotAbsolute { .. }));

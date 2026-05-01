@@ -130,6 +130,7 @@ fn run_dry_run_produces_claude_envvars() {
 }
 
 #[test]
+#[cfg(unix)]
 fn run_executes_fake_claude_with_env() {
     // Build a PATH containing only the fake claude.
     let home = tempfile::tempdir().unwrap();
@@ -201,6 +202,7 @@ fn run_executes_fake_claude_with_env() {
 }
 
 #[test]
+#[cfg(unix)]
 fn run_executes_fake_codex_with_env() {
     let home = tempfile::tempdir().unwrap();
     let bin_dir = tempfile::tempdir().unwrap();

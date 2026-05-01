@@ -170,13 +170,13 @@ mod tests {
             .find(|(k, _)| *k == "CLAUDE_CONFIG_DIR")
             .map(|(_, v)| v.clone())
             .unwrap();
-        assert_eq!(cfg, "/maru/profiles/work/claude");
+        assert_eq!(cfg, root.join("claude").as_os_str());
         let plugin = env
             .iter()
             .find(|(k, _)| *k == "CLAUDE_CODE_PLUGIN_CACHE_DIR")
             .map(|(_, v)| v.clone())
             .unwrap();
-        assert_eq!(plugin, "/maru/profiles/work/claude/plugins");
+        assert_eq!(plugin, root.join("claude/plugins").as_os_str());
     }
 
     #[test]
@@ -185,7 +185,7 @@ mod tests {
         let env = Harness::Codex.env_for_profile(&root);
         assert_eq!(env.len(), 1);
         assert_eq!(env[0].0, "CODEX_HOME");
-        assert_eq!(env[0].1, "/maru/profiles/work/codex");
+        assert_eq!(env[0].1, root.join("codex").as_os_str());
     }
 
     #[test]
@@ -194,7 +194,7 @@ mod tests {
         let env = Harness::Gemini.env_for_profile(&root);
         assert_eq!(env.len(), 1);
         assert_eq!(env[0].0, "GEMINI_CLI_HOME");
-        assert_eq!(env[0].1, "/maru/profiles/work/gemini");
+        assert_eq!(env[0].1, root.join("gemini").as_os_str());
     }
 
     #[test]

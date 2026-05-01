@@ -32,8 +32,9 @@ allow = [
 ]
 
 [bans]
-multiple-versions = "warn"
-wildcards         = "deny"
+multiple-versions     = "warn"
+wildcards             = "deny"
+allow-wildcard-paths  = true   # path-based deps within the workspace are not real wildcards
 deny = [
     # Per GENESIS §13: no async, no networking. Fail loudly if a transitive
     # dep tries to pull these in.

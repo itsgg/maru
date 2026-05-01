@@ -170,6 +170,19 @@ mod tests {
         }
     }
 
+    /// OS-appropriate absolute path. `Path::is_absolute()` is platform-
+    /// specific (Windows requires drive letters), so build a path under
+    /// the OS-appropriate temp root which always satisfies `is_absolute()`.
+    /// We don't create anything on disk — only the path shape matters.
+    fn abs(parts: &[&str]) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("maru-test");
+        for part in parts {
+            p.push(part);
+        }
+        p
+    }
+
     #[test]
     fn metadata() {
         let a = ClaudeAdapter;
@@ -182,8 +195,8 @@ mod tests {
     fn plan_emits_both_env_vars_unconditionally() {
         let a = ClaudeAdapter;
         let name = ProfileName::new("work").unwrap();
-        let root = PathBuf::from("/maru/profiles/work");
-        let home = PathBuf::from("/Users/test"); // macOS-shaped to avoid gate
+        let root = abs(&["maru", "profiles", "work"]);
+        let home = abs(&["Users", "test"]); // macOS-shaped to avoid gate
         let env = FakeEnvironment::new();
         let plan = a.plan(&ctx(&name, &root, &home), &env).unwrap();
 
@@ -207,7 +220,7 @@ mod tests {
             .find(|(k, _)| k == "CLAUDE_CONFIG_DIR")
             .map(|(_, v)| v)
             .unwrap();
-        assert_eq!(cfg, "/maru/profiles/work/claude");
+        assert_eq!(cfg, root.join("claude").as_os_str());
 
         let plugin = plan
             .env
@@ -215,7 +228,7 @@ mod tests {
             .find(|(k, _)| k == "CLAUDE_CODE_PLUGIN_CACHE_DIR")
             .map(|(_, v)| v)
             .unwrap();
-        assert_eq!(plugin, "/maru/profiles/work/claude/plugins");
+        assert_eq!(plugin, root.join("claude/plugins").as_os_str());
     }
 
     #[test]
@@ -223,7 +236,7 @@ mod tests {
         let a = ClaudeAdapter;
         let name = ProfileName::new("work").unwrap();
         let root = PathBuf::from("relative");
-        let home = PathBuf::from("/Users/test");
+        let home = abs(&["Users", "test"]);
         let env = FakeEnvironment::new();
         let err = a.plan(&ctx(&name, &root, &home), &env).unwrap_err();
         assert!(matches!(err, AdapterError::NotAbsolute { .. }));

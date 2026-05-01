@@ -1,4 +1,4 @@
-# `dist` config (formerly cargo-dist). Run: `dist init` once to update;
+# `dist` config (formerly cargo-dist). Run: `dist init` to regenerate;
 # `dist plan` to dry-run; `dist build` to produce artifacts.
 # https://github.com/axodotdev/cargo-dist
 #
@@ -8,39 +8,32 @@
 [workspace]
 members = ["cargo:."]
 
+# Config for 'dist'
 [dist]
-# Pinned to a specific release for reproducibility. Bump deliberately.
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.31.0"
-
-# Use GitHub Releases as the artifact host.
+# CI backends to support
 ci = "github"
-hosting = ["github"]
-
-# Targets per GENESIS §15 cross-platform matrix.
-targets = [
-    "x86_64-unknown-linux-gnu",
-    "aarch64-unknown-linux-gnu",
-    "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
-    "x86_64-pc-windows-msvc",
-]
-
-# Installers — what users invoke to install.
-installers = [
-    "shell",       # curl -sSL ... | sh
-    "powershell",  # iwr ... | iex
-    "homebrew",    # brew install <tap>/maru
-]
-# winget: not yet — requires per-release manifest PRs. See docs/notes/phase-4-handoff.md.
-# scoop:  same — manifest PR per release. Tracked in handoff.
-
-# Homebrew tap. The user must create this repo (empty, public) and grant
-# the GitHub App / dist token access. See handoff doc.
+# Where to host releases
+hosting = "github"
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# The installers to generate for each app
+installers = ["shell", "powershell", "homebrew"]
+# A GitHub repo to push Homebrew formulas to
 tap = "itsgg/homebrew-maru"
-
-# Pre-release marker for tags matching `v0.*`. Phase 4 ships `v0.1.0`
-# as the first dist-managed release; v1.0.0 graduates to "stable".
+# Publish jobs to run in CI
+publish-jobs = ["homebrew"]
+# Extra static files to include in each App (path relative to this Cargo.toml's dir)
+include = ["LICENSE-APACHE", "LICENSE-MIT", "README.md", "CHANGELOG.md"]
+# Generate and dist a source tarball
+source-tarball = true
+# Which actions to run on pull requests
 pr-run-mode = "plan"
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
 
 # Which binaries to ship from each crate.
 [dist.binaries]
@@ -48,18 +41,6 @@ pr-run-mode = "plan"
 "maru-shim" = ["maru-shim"]
 
 # Build the shim under [profile.shim] (lto=fat, opt-level=z, strip)
-# for the cold-start budget. The CLI uses [profile.release].
+# for the cold-start budget. The CLI uses [profile.dist] (release+thin-LTO).
 [dist.dependencies.profile-overrides]
 "maru-shim" = "shim"
-
-# Auto-include alongside binaries.
-include = ["LICENSE-APACHE", "LICENSE-MIT", "README.md", "CHANGELOG.md"]
-
-# Source tarballs go in too.
-source-tarball = true
-
-# After release, dist auto-PRs the Homebrew formula to the tap repo.
-publish-jobs = ["homebrew"]
-
-# `dist init`-generated default. We can extend later for cargo-installer or msi.
-allow-dirty = ["ci"]

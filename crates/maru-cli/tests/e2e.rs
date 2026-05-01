@@ -336,6 +336,153 @@ fn adapter_list_includes_all_three_harnesses() {
 }
 
 #[test]
+fn pin_writes_dot_maru_in_cwd() {
+    let home = tempfile::tempdir().unwrap();
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    let work = tempfile::tempdir().unwrap();
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "pin",
+            "work",
+        ])
+        .current_dir(work.path())
+        .assert()
+        .success();
+    let pin = std::fs::read_to_string(work.path().join(".maru")).unwrap();
+    assert_eq!(pin.trim(), "work");
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "unpin",
+        ])
+        .current_dir(work.path())
+        .assert()
+        .success();
+    assert!(!work.path().join(".maru").exists());
+}
+
+#[test]
+fn clone_excludes_credentials() {
+    let home = tempfile::tempdir().unwrap();
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "src",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    let claude_dir = home.path().join("profiles/src/claude");
+    std::fs::write(claude_dir.join(".credentials.json"), "SECRET").unwrap();
+    std::fs::write(claude_dir.join("settings.json"), "{}").unwrap();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "clone",
+            "src",
+            "dst",
+        ])
+        .assert()
+        .success();
+
+    let dst_claude = home.path().join("profiles/dst/claude");
+    assert!(dst_claude.join("settings.json").exists());
+    assert!(
+        !dst_claude.join(".credentials.json").exists(),
+        ".credentials.json must NOT be present in cloned profile"
+    );
+}
+
+#[test]
+fn export_tarball_omits_credentials() {
+    let home = tempfile::tempdir().unwrap();
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "src",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    let claude_dir = home.path().join("profiles/src/claude");
+    std::fs::write(claude_dir.join(".credentials.json"), "SECRET").unwrap();
+    std::fs::write(claude_dir.join("settings.json"), "{\"theme\":\"dark\"}").unwrap();
+
+    let archive = home.path().join("src.tar.gz");
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "export",
+            "src",
+            "--to",
+            archive.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    assert!(archive.exists());
+
+    let entries = std::process::Command::new("tar")
+        .arg("tzf")
+        .arg(&archive)
+        .output()
+        .expect("tar");
+    let names = String::from_utf8(entries.stdout).unwrap();
+    assert!(
+        !names.contains(".credentials.json"),
+        "tarball should not contain credentials: {names}"
+    );
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "import",
+            archive.to_str().unwrap(),
+            "--name",
+            "imported",
+        ])
+        .assert()
+        .success();
+    let imported = home.path().join("profiles/imported/claude");
+    assert!(imported.join("settings.json").exists());
+    assert!(!imported.join(".credentials.json").exists());
+}
+
+#[test]
 fn delete_requires_force_for_activated_profile() {
     let home = tempfile::tempdir().unwrap();
     maru_cmd()

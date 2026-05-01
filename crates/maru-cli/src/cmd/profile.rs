@@ -1,12 +1,15 @@
 //! `maru profile ...` subcommand surface. GENESIS §8.
 
+use std::path::PathBuf;
+
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use maru_core::{HarnessId, ProfileName};
 use maru_store::{
     ProfileEntry,
     active::{read as read_active, write as write_active},
-    profile_dirs::{apply_seeds, ensure_profile_dirs},
+    copy::copy_filtered,
+    profile_dirs::{apply_seeds, ensure_profile_dirs, profile_subdir},
     snapshot::snapshot_state,
     state::{insert_profile, read as read_state, update as update_state},
 };
@@ -30,6 +33,18 @@ pub enum ProfileCmd {
     Default(DefaultArgs),
     /// Rename a profile.
     Rename(RenameArgs),
+    /// Write `.maru` in the cwd to pin a profile to this directory.
+    Pin(PinArgs),
+    /// Delete `.maru` in the cwd.
+    Unpin,
+    /// Clone a profile (excludes credentials per GENESIS §8 deny-list).
+    Clone(CloneArgs),
+    /// Export a profile as a tarball (excludes credentials).
+    Export(ExportArgs),
+    /// Import a previously-exported tarball into a new profile.
+    Import(ImportArgs),
+    /// Copy an existing `~/.<harness>` directory into a new maru profile.
+    ImportExisting(ImportExistingArgs),
 }
 
 #[derive(Debug, Args)]
@@ -81,6 +96,53 @@ pub struct RenameArgs {
     pub to: String,
 }
 
+#[derive(Debug, Args)]
+pub struct PinArgs {
+    pub name: String,
+    /// Overwrite an existing `.maru` even if it points elsewhere.
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct CloneArgs {
+    /// Source profile name.
+    pub from: String,
+    /// Destination profile name.
+    pub to: String,
+}
+
+#[derive(Debug, Args)]
+pub struct ExportArgs {
+    pub name: String,
+    /// Output path for the tarball (e.g. `/tmp/work.tar.gz`).
+    #[arg(long)]
+    pub to: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct ImportArgs {
+    /// Path to a tarball previously written by `maru profile export`.
+    pub from: PathBuf,
+    /// Optional override for the resulting profile name.
+    /// Defaults to the name embedded in the tarball.
+    #[arg(long)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ImportExistingArgs {
+    /// Which harness to import (`claude`, `codex`, or `gemini`).
+    #[arg(long)]
+    pub harness: HarnessId,
+    /// Profile name for the imported state.
+    #[arg(long, default_value = "imported")]
+    pub name: String,
+    /// Override the source dir (default: `~/.<harness>`).
+    #[arg(long)]
+    pub from: Option<PathBuf>,
+}
+
 pub fn run(ctx: &CliContext, cmd: ProfileCmd) -> Result<()> {
     match cmd {
         ProfileCmd::Create(args) => create(ctx, args),
@@ -90,6 +152,12 @@ pub fn run(ctx: &CliContext, cmd: ProfileCmd) -> Result<()> {
         ProfileCmd::Delete(args) => delete(ctx, args),
         ProfileCmd::Default(args) => default(ctx, args),
         ProfileCmd::Rename(args) => rename(ctx, args),
+        ProfileCmd::Pin(args) => pin(args),
+        ProfileCmd::Unpin => unpin(),
+        ProfileCmd::Clone(args) => clone(ctx, args),
+        ProfileCmd::Export(args) => export(ctx, args),
+        ProfileCmd::Import(args) => import(ctx, args),
+        ProfileCmd::ImportExisting(args) => import_existing(ctx, args),
     }
 }
 
@@ -348,4 +416,322 @@ fn rename(ctx: &CliContext, args: RenameArgs) -> Result<()> {
 
     eprintln!("maru: renamed {:?} -> {:?}", from.as_str(), to.as_str());
     Ok(())
+}
+
+// ───── pin / unpin ──────────────────────────────────────────────────────
+
+const PIN_FILE: &str = ".maru";
+
+fn pin(args: PinArgs) -> Result<()> {
+    let name = ProfileName::new(args.name)
+        .map_err(|e| CliError::user(format!("invalid profile name: {e}")))?;
+    let cwd = std::env::current_dir().context("get cwd")?;
+    let pin_path = cwd.join(PIN_FILE);
+
+    if pin_path.exists() && !args.force {
+        let existing = std::fs::read_to_string(&pin_path).unwrap_or_default();
+        let existing_first_line = existing.lines().next().unwrap_or("").trim();
+        if existing_first_line != name.as_str() {
+            bail!(CliError::user(format!(
+                "{} already pins {:?}; pass --force to overwrite",
+                pin_path.display(),
+                existing_first_line
+            )));
+        }
+        // Idempotent rewrite: same name, no-op except touch.
+    }
+
+    std::fs::write(&pin_path, format!("{}\n", name.as_str()))
+        .with_context(|| format!("write {}", pin_path.display()))?;
+    eprintln!(
+        "maru: pinned {:?} via {}",
+        name.as_str(),
+        pin_path.display()
+    );
+    Ok(())
+}
+
+fn unpin() -> Result<()> {
+    let cwd = std::env::current_dir().context("get cwd")?;
+    let pin_path = cwd.join(PIN_FILE);
+    if !pin_path.exists() {
+        eprintln!("maru: no .maru in {} (nothing to do)", cwd.display());
+        return Ok(());
+    }
+    std::fs::remove_file(&pin_path).with_context(|| format!("remove {}", pin_path.display()))?;
+    eprintln!("maru: removed {}", pin_path.display());
+    Ok(())
+}
+
+// ───── clone ───────────────────────────────────────────────────────────
+
+fn clone(ctx: &CliContext, args: CloneArgs) -> Result<()> {
+    let from =
+        ProfileName::new(args.from).map_err(|e| CliError::user(format!("invalid `from`: {e}")))?;
+    let to = ProfileName::new(args.to).map_err(|e| CliError::user(format!("invalid `to`: {e}")))?;
+
+    let state = read_state(ctx.maru_home()).context("read state.toml")?;
+    let from_entry = state
+        .profiles
+        .get(from.as_str())
+        .ok_or_else(|| CliError::user(format!("no such profile {:?}", from.as_str())))?;
+    if state.profiles.contains_key(to.as_str()) {
+        bail!(CliError::user(format!(
+            "destination profile {:?} already exists",
+            to.as_str()
+        )));
+    }
+
+    let from_root = ctx.profile_root(from.as_str());
+    let to_root = ctx.profile_root(to.as_str());
+
+    let mut total_copied = 0_usize;
+    let mut total_excluded = 0_usize;
+    for harness in &from_entry.harnesses {
+        let from_dir = from_root.join(profile_subdir(*harness));
+        let to_dir = to_root.join(profile_subdir(*harness));
+        let report = copy_filtered(&from_dir, &to_dir, *harness).context("copy profile dir")?;
+        total_copied = total_copied.saturating_add(report.copied);
+        total_excluded = total_excluded.saturating_add(report.excluded);
+    }
+
+    insert_profile(
+        ctx.maru_home(),
+        &to,
+        ProfileEntry::new(from_entry.harnesses.clone()),
+    )
+    .context("register new profile")?;
+
+    eprintln!(
+        "maru: cloned {:?} -> {:?} ({} files, {} excluded credentials)",
+        from.as_str(),
+        to.as_str(),
+        total_copied,
+        total_excluded,
+    );
+    Ok(())
+}
+
+// ───── export / import ──────────────────────────────────────────────────
+
+fn export(ctx: &CliContext, args: ExportArgs) -> Result<()> {
+    use std::io::Write;
+
+    let name = ProfileName::new(args.name)
+        .map_err(|e| CliError::user(format!("invalid profile name: {e}")))?;
+
+    let state = read_state(ctx.maru_home()).context("read state.toml")?;
+    let entry = state
+        .profiles
+        .get(name.as_str())
+        .ok_or_else(|| CliError::user(format!("no such profile {:?}", name.as_str())))?;
+    let from_root = ctx.profile_root(name.as_str());
+
+    // Stage filtered copy in a tempdir, then tar it up.
+    let staging = tempfile::tempdir().context("create staging tempdir")?;
+    let staging_root = staging.path().join(name.as_str());
+    let mut total_excluded = 0_usize;
+    for harness in &entry.harnesses {
+        let from_dir = from_root.join(profile_subdir(*harness));
+        let to_dir = staging_root.join(profile_subdir(*harness));
+        let report =
+            copy_filtered(&from_dir, &to_dir, *harness).context("filtered copy for export")?;
+        total_excluded = total_excluded.saturating_add(report.excluded);
+    }
+
+    // Write a manifest so import can reconstruct the profile.
+    let manifest = ExportManifest {
+        version: 1,
+        name: name.as_str().to_owned(),
+        harnesses: entry
+            .harnesses
+            .iter()
+            .map(|h| h.as_str().to_owned())
+            .collect(),
+    };
+    let manifest_text = serde_json::to_string_pretty(&manifest)?;
+    std::fs::write(staging_root.join(".maru-manifest.json"), manifest_text)
+        .context("write manifest")?;
+
+    // Tar.gz the staging dir.
+    if let Some(parent) = args.to.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let f =
+        std::fs::File::create(&args.to).with_context(|| format!("create {}", args.to.display()))?;
+    let gz = flate2::write::GzEncoder::new(f, flate2::Compression::default());
+    let mut tar_builder = tar::Builder::new(gz);
+    tar_builder
+        .append_dir_all(name.as_str(), &staging_root)
+        .context("append profile to tarball")?;
+    let gz = tar_builder.into_inner().context("finalize tar")?;
+    let mut f = gz.finish().context("flush gzip")?;
+    f.flush().context("flush archive")?;
+
+    eprintln!(
+        "maru: exported {:?} to {} ({} excluded credentials)",
+        name.as_str(),
+        args.to.display(),
+        total_excluded,
+    );
+    Ok(())
+}
+
+fn import(ctx: &CliContext, args: ImportArgs) -> Result<()> {
+    let archive_file =
+        std::fs::File::open(&args.from).with_context(|| format!("open {}", args.from.display()))?;
+    let gz = flate2::read::GzDecoder::new(archive_file);
+    let mut tar = tar::Archive::new(gz);
+
+    let staging = tempfile::tempdir().context("create staging tempdir")?;
+    tar.unpack(staging.path()).context("unpack archive")?;
+
+    // Find the single top-level directory (the profile name).
+    let entries: Vec<_> = std::fs::read_dir(staging.path())
+        .context("scan staging")?
+        .filter_map(std::result::Result::ok)
+        .collect();
+    let profile_dir = entries
+        .iter()
+        .find(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(std::fs::DirEntry::path)
+        .ok_or_else(|| {
+            CliError::user("archive contains no top-level profile directory".to_owned())
+        })?;
+
+    let manifest_path = profile_dir.join(".maru-manifest.json");
+    let manifest_text = std::fs::read_to_string(&manifest_path).with_context(|| {
+        format!(
+            "read manifest at {} (was the archive produced by `maru profile export`?)",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: ExportManifest =
+        serde_json::from_str(&manifest_text).context("parse manifest")?;
+    if manifest.version != 1 {
+        bail!(CliError::user(format!(
+            "unsupported manifest version: {}",
+            manifest.version
+        )));
+    }
+
+    let target_name = args.name.unwrap_or(manifest.name);
+    let target = ProfileName::new(target_name)
+        .map_err(|e| CliError::user(format!("invalid target profile name: {e}")))?;
+
+    let harnesses: Vec<HarnessId> = manifest
+        .harnesses
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let dst_root = ctx.profile_root(target.as_str());
+    if dst_root.exists() {
+        bail!(CliError::user(format!(
+            "destination profile dir already exists: {}",
+            dst_root.display()
+        )));
+    }
+
+    // Move the staged dir into the profiles tree (minus the manifest).
+    std::fs::create_dir_all(&dst_root).with_context(|| format!("create {}", dst_root.display()))?;
+    for entry in std::fs::read_dir(&profile_dir).context("scan profile_dir")? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if name == ".maru-manifest.json" {
+            continue;
+        }
+        let src = entry.path();
+        let dst = dst_root.join(&name);
+        std::fs::rename(&src, &dst).or_else(|_| {
+            // cross-fs move falls back to copy
+            copy_dir_recursive(&src, &dst)
+        })?;
+    }
+
+    insert_profile(ctx.maru_home(), &target, ProfileEntry::new(harnesses))
+        .context("register imported profile")?;
+
+    eprintln!(
+        "maru: imported profile {:?} from {}",
+        target.as_str(),
+        args.from.display()
+    );
+    Ok(())
+}
+
+fn import_existing(ctx: &CliContext, args: ImportExistingArgs) -> Result<()> {
+    let target =
+        ProfileName::new(args.name).map_err(|e| CliError::user(format!("invalid name: {e}")))?;
+
+    let env = maru_core::SystemEnvironment::new();
+    let home = maru_core::Environment::home_dir(&env)
+        .ok_or_else(|| CliError::env("could not resolve home dir"))?;
+    let default_src = home.join(format!(".{}", args.harness.as_str()));
+    let src = args.from.unwrap_or(default_src);
+
+    if !src.exists() {
+        bail!(CliError::user(format!(
+            "source path {} does not exist",
+            src.display()
+        )));
+    }
+
+    let dst_root = ctx.profile_root(target.as_str());
+    let dst_dir = dst_root.join(profile_subdir(args.harness));
+
+    let stats =
+        copy_filtered(&src, &dst_dir, args.harness).context("copy existing harness state")?;
+
+    insert_profile(
+        ctx.maru_home(),
+        &target,
+        ProfileEntry::new(vec![args.harness]),
+    )
+    .context("register imported profile")?;
+
+    eprintln!(
+        "maru: imported {} into profile {:?} ({} files, {} excluded credentials)",
+        src.display(),
+        target.as_str(),
+        stats.copied,
+        stats.excluded,
+    );
+    if stats.excluded > 0 {
+        eprintln!("maru: excluded files (you must re-authenticate to populate them):");
+        for p in stats.excluded_paths.iter().take(5) {
+            eprintln!("       - {}", p.display());
+        }
+        if stats.excluded_paths.len() > 5 {
+            eprintln!(
+                "       ... and {} more",
+                stats.excluded_paths.len().saturating_sub(5)
+            );
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    if src.is_dir() {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let s = entry.path();
+            let d = dst.join(entry.file_name());
+            copy_dir_recursive(&s, &d)?;
+        }
+    } else {
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(src, dst)?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct ExportManifest {
+    version: u32,
+    name: String,
+    harnesses: Vec<String>,
 }

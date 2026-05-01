@@ -10,6 +10,11 @@ homepage.workspace     = true
 authors.workspace      = true
 publish     = false
 
+# Internal binary crate (not published to crates.io). Opt into dist so
+# the release workflow includes it in the matrix.
+[package.metadata.dist]
+dist = true
+
 [[bin]]
 name = "maru"
 path = "src/main.rs"

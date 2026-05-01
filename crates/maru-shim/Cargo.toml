@@ -10,6 +10,11 @@ homepage.workspace     = true
 authors.workspace      = true
 publish     = false
 
+# Internal binary crate (not published to crates.io). Opt into dist so
+# the release workflow includes it in the matrix.
+[package.metadata.dist]
+dist = true
+
 # GENESIS §9: shim must depend only on `std` and `directories` (or `etcetera`).
 # Forbidden: clap, serde, serde_derive, serde_json, toml, tokio, anyhow,
 # tracing, reqwest. Hand-rolled minimal config reader for state.toml + active.txt.

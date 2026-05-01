@@ -95,45 +95,55 @@ mod tests {
     }
 
     // ---- proptest: write_atomic is torn-write-free under concurrency ----
+    //
+    // Unix-only: Windows `MoveFileEx` does not guarantee atomic
+    // rename-over-existing under concurrent renames targeting the same
+    // destination — one of them can hit `PermissionDenied` before the
+    // rename completes. Production callers serialize `state.toml` writes
+    // via `with_write_lock`, so the property is only required to hold
+    // without external locking on Unix.
+    #[cfg(not(windows))]
+    mod concurrent_property {
+        use super::write_atomic;
+        use proptest::collection::vec;
+        use proptest::prelude::{ProptestConfig, prop_assert, proptest};
+        use std::collections::BTreeSet;
+        use std::thread;
 
-    use proptest::collection::vec;
-    use proptest::prelude::{ProptestConfig, prop_assert, proptest};
-    use std::collections::BTreeSet;
-    use std::thread;
+        proptest! {
+            #![proptest_config(ProptestConfig {
+                cases: 16,
+                ..ProptestConfig::default()
+            })]
 
-    proptest! {
-        #![proptest_config(ProptestConfig {
-            cases: 16,
-            ..ProptestConfig::default()
-        })]
+            /// Many threads call `write_atomic` against the same target with
+            /// distinct payloads. The final on-disk content must be exactly
+            /// one of the per-thread payloads — never a torn or mixed write.
+            #[test]
+            fn prop_concurrent_writes_never_torn(
+                payloads in vec(vec(0_u8..=255, 1..1024), 2..6),
+            ) {
+                let dir = tempfile::tempdir().unwrap();
+                let target = dir.path().join("contents.bin");
 
-        /// Many threads call `write_atomic` against the same target with
-        /// distinct payloads. The final on-disk content must be exactly
-        /// one of the per-thread payloads — never a torn or mixed write.
-        #[test]
-        fn prop_concurrent_writes_never_torn(
-            payloads in vec(vec(0_u8..=255, 1..1024), 2..6),
-        ) {
-            let dir = tempfile::tempdir().unwrap();
-            let target = dir.path().join("contents.bin");
+                thread::scope(|scope| {
+                    for p in &payloads {
+                        let target = &target;
+                        scope.spawn(move || {
+                            write_atomic(target, p).expect("write_atomic ok");
+                        });
+                    }
+                });
 
-            thread::scope(|scope| {
-                for p in &payloads {
-                    let target = &target;
-                    scope.spawn(move || {
-                        write_atomic(target, p).expect("write_atomic ok");
-                    });
-                }
-            });
-
-            let final_bytes = std::fs::read(&target).expect("file exists");
-            // The final bytes must equal exactly one of the inputs.
-            let inputs: BTreeSet<Vec<u8>> = payloads.into_iter().collect();
-            prop_assert!(
-                inputs.contains(&final_bytes),
-                "final file is neither of the inputs: {} bytes",
-                final_bytes.len(),
-            );
+                let final_bytes = std::fs::read(&target).expect("file exists");
+                // The final bytes must equal exactly one of the inputs.
+                let inputs: BTreeSet<Vec<u8>> = payloads.into_iter().collect();
+                prop_assert!(
+                    inputs.contains(&final_bytes),
+                    "final file is neither of the inputs: {} bytes",
+                    final_bytes.len(),
+                );
+            }
         }
     }
 }

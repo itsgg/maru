@@ -55,10 +55,12 @@ MARU_PROFILE=work claude
 maru run --profile work --dry-run -- claude
 ```
 
+Note: the first arg after `--` is the harness binary name (`claude`, `codex`, or `gemini`); `maru run` uses argv[0] dispatch the same way the shim does. Without it you'll get a clap error.
+
 Prints the JSON activation plan (env vars, args prefix, diagnostics) without exec'ing anything. Useful when something feels wrong.
 
 ## What to read next
 
 - **[GENESIS §7](../GENESIS.md)** — the per-harness adapter contracts. Important if you've heard rumors about the carve-outs.
 - **[`limitations.md`](limitations.md)** — what maru does and doesn't cover, especially around IDE extension hosts.
-- **[`adapters/`](adapters/)** — per-harness specifics (lands per Phase 2).
+- Per-harness specifics: [`adapters/claude.md`](adapters/claude.md), [`adapters/codex.md`](adapters/codex.md), [`adapters/gemini.md`](adapters/gemini.md).

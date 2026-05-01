@@ -7,6 +7,8 @@ Pre-1.0 — installation is from source. Distribution channels (Homebrew tap, Sc
 - Rust 1.95.0 (the toolchain pinned in `rust-toolchain.toml`).
 - One or more of the supported harness CLIs already on PATH: [`claude`](https://docs.claude.com/en/docs/claude-code), [`codex`](https://developers.openai.com/codex), [`gemini`](https://github.com/google-gemini/gemini-cli).
 
+> The toolchain pin in `rust-toolchain.toml` is the build toolchain; the workspace MSRV (`Cargo.toml [workspace.package].rust-version`) is `1.85` for end-user `cargo install`.
+
 ## Build from source
 
 ```sh
@@ -29,12 +31,29 @@ Two binaries land under `target/release/`:
 This:
 
 1. Creates `$MARU_HOME/bin/` and symlinks `claude`, `codex`, `gemini` into it pointing at `maru-shim` (Unix). On Windows, writes `.cmd` shims and copies the shim binary under each harness name.
-2. Appends a managed block to your shell rc (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`):
+2. Appends a managed block to your shell rc (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`). The PATH entry is platform-specific:
+
+   **macOS:**
 
    ```sh
    # >>> maru managed block (do not edit) >>>
    export PATH="$HOME/Library/Application Support/maru/bin:$PATH"
    # <<< maru managed block <<<
+   ```
+
+   **Linux:**
+
+   ```sh
+   # >>> maru managed block (do not edit) >>>
+   export PATH="$XDG_DATA_HOME/maru/bin:$PATH"   # typically $HOME/.local/share/maru/bin
+   # <<< maru managed block <<<
+   ```
+
+   **Windows:**
+
+   ```powershell
+   # The installer writes %LOCALAPPDATA%\maru\bin onto the user PATH via the registry;
+   # there is no shell rc edit on Windows.
    ```
 
 3. The block is delimited by sentinel comments. Re-running `maru install` rewrites the block in-place; it never duplicates and refuses to overwrite a block you've hand-edited inside the markers.

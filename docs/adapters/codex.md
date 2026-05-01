@@ -24,7 +24,7 @@ $MARU_HOME/profiles/<name>/codex/
 
 Codex documentation references three storage modes — `file`, `keyring`, `auto` — but as of Codex CLI 0.125.0 (Phase 0 spike finding 0.5) there is no documented `[auth] storage` directive in `config.toml`, and `auth.json` appears to be the macOS default with no required directive.
 
-For this reason the adapter currently emits **no seed** (`seed() == vec![]`). If the Phase 1 live-smoke nightly job discovers that Linux or Windows defaults to keyring storage (which would defeat per-profile isolation), the adapter will reintroduce a per-platform seed at that time.
+For this reason the adapter currently emits **no seed** (`seed() == vec![]`). If a live-smoke nightly CI job discovers that Linux or Windows defaults to keyring storage (which would defeat per-profile isolation), the adapter will reintroduce a per-platform seed at that time. The live-smoke job is pending the user provisioning the necessary credentials infrastructure (tracked in [`../notes/phase-4-handoff.md`](../notes/phase-4-handoff.md)).
 
 ## Inner profiles vs maru profiles
 

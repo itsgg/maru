@@ -6,7 +6,7 @@
 
 - **Terminal-launched harness invocations.** `claude`/`codex`/`gemini` run from any shell — login shell, IDE-integrated terminal, tmux, ssh — pick up the active profile via the `argv[0]`-dispatched shim.
 - **Project pins via `.maru` files.** Phase 3.
-- **Cross-platform.** macOS, Linux, Windows (native + WSL2). The Linux/WSL Claude credential gate (#47661) is enforced by the adapter.
+- **Cross-platform.** macOS, Linux, Windows (native + WSL2). The Claude credential gate (#47661) is enforced by the adapter on Linux without an active D-Bus session (WSL2 is detected as Linux at compile time); the gate trips when `~/.claude/.credentials.json` exists and `DBUS_SESSION_BUS_ADDRESS` is unset (see [`crates/maru-adapters/src/claude.rs`](https://github.com/itsgg/maru/blob/main/crates/maru-adapters/src/claude.rs)).
 
 ## NOT covered in v1
 
@@ -42,7 +42,7 @@ Per Claude Code 2.1.x, the following carve-outs are still upstream issues, not m
 
 ### Codex: `keyring` storage mode
 
-If your `~/.codex/config.toml` enables OS-keyring storage for credentials, profile isolation breaks because keyring entries are not keyed per-`CODEX_HOME`. Phase 0 spike finding 0.5 disconfirmed the earlier-planned `[auth] storage = "file"` seed; per-platform behavior is verified by Phase 1 live-smoke nightly CI before any seed is reintroduced.
+If your `~/.codex/config.toml` enables OS-keyring storage for credentials, profile isolation breaks because keyring entries are not keyed per-`CODEX_HOME`. Phase 0 spike finding 0.5 disconfirmed the earlier-planned `[auth] storage = "file"` seed; per-platform behavior will be verified by a live-smoke nightly CI job once the user provisions the necessary credentials infrastructure (tracked in [`notes/phase-4-handoff.md`](notes/phase-4-handoff.md)) before any seed is reintroduced.
 
 ### Gemini: `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true`
 
@@ -50,7 +50,7 @@ When this env var is set, OAuth tokens go to the OS keychain under a single shar
 
 ### Phase 0 spike checks deferred to live-smoke
 
-Three Phase 0 verification matrix entries (0.2 Claude carve-outs, 0.3 Linux/WSL credential gate, 0.7 Gemini keychain warning) require interactive sessions or specific runner conditions. They're deferred to the Phase 1 live-smoke nightly CI job, which runs against real harness binaries with sealed credentials.
+Three Phase 0 verification matrix entries (0.2 Claude carve-outs, 0.3 Linux/WSL credential gate, 0.7 Gemini keychain warning) require interactive sessions or specific runner conditions. They are deferred to a live-smoke nightly CI job that will run against real harness binaries with sealed credentials, once the user provisions the necessary credentials infrastructure (tracked in [`notes/phase-4-handoff.md`](notes/phase-4-handoff.md)).
 
 ## When upstream fixes a carve-out
 

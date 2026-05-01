@@ -36,18 +36,12 @@ Exit criteria (from GENESIS §14):
 
 ## maru-adapters
 
-- [ ] **1.18** — `ClaudeAdapter` impl per §7.1: emits `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_PLUGIN_CACHE_DIR` unconditionally _(GENESIS §7.1)_
-  - depends-on: 1.9
-  - acceptance: `plan(&ctx)` returns the two env vars with absolute paths; unit test asserts both keys present.
-- [ ] **1.19** — Claude Linux/WSL credential gate detection _(GENESIS §7.1)_
-  - depends-on: 1.18, 1.5
-  - acceptance: emits `Diagnostic::Error` if Linux/WSL + `~/.claude/.credentials.json` exists + no keyring; tested via fake `Environment`.
-- [ ] **1.20** — `CodexAdapter` impl per §7.2 (seed = [] until live-smoke verifies) _(GENESIS §7.2)_
-  - depends-on: 1.9
-  - acceptance: `plan(&ctx)` returns one env var (`CODEX_HOME`); seed returns `vec![]`.
-- [ ] **1.21** — `validate()` for both adapters _(GENESIS §7)_
-  - depends-on: 1.18, 1.20
-  - acceptance: returns `ValidationReport` with appropriate Info/Warn/Error per §7.
+- [x] **1.18** — `ClaudeAdapter`: emits `CLAUDE_CONFIG_DIR` + `CLAUDE_CODE_PLUGIN_CACHE_DIR` unconditionally with absolute paths. _(GENESIS §7.1)_
+- [x] **1.19** — Claude Linux/WSL gate (#47661): tripped when target_os=linux + `~/.claude/.credentials.json` exists + no `DBUS_SESSION_BUS_ADDRESS`; emits `Diagnostic::Error`. cfg-gated tests for both Linux and non-Linux platforms. _(GENESIS §7.1)_
+- [x] **1.20** — `CodexAdapter`: emits `CODEX_HOME` only; seed returns `vec![]` per the corrected GENESIS §7.2. _(GENESIS §7.2)_
+- [x] **1.21** — `validate()` for both adapters: rejects non-directory profile paths; clean for fresh dirs. _(GENESIS §7)_
+
+Plus a registry: `v1_adapters() -> Vec<Box<dyn HarnessAdapter>>` and `adapter_for(HarnessId)`. Gemini returns `None` (Phase 2 work).
 
 ## maru-activation
 

@@ -1,0 +1,20 @@
+[package]
+name        = "maru-adapters"
+description = "Per-harness adapter implementations for maru."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+publish     = false
+
+[dependencies]
+maru-core = { path = "../maru-core" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

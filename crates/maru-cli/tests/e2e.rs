@@ -522,7 +522,7 @@ fn export_tarball_omits_credentials() {
 }
 
 #[test]
-fn delete_requires_force_for_activated_profile() {
+fn delete_succeeds_for_never_activated_profile() {
     let home = tempfile::tempdir().unwrap();
     maru_cmd()
         .args([
@@ -548,6 +548,394 @@ fn delete_requires_force_for_activated_profile() {
         ])
         .assert()
         .success();
+}
+
+#[test]
+fn delete_requires_force_for_activated_profile() {
+    let home = tempfile::tempdir().unwrap();
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    // Flip ever_activated = true directly in state.toml to simulate
+    // a profile that has been activated at least once.
+    maru_store::state::update(home.path(), |s| {
+        let entry = s.profiles.get_mut("work").expect("work profile exists");
+        entry.ever_activated = true;
+        Ok(())
+    })
+    .unwrap();
+
+    // Without --force: must fail with a CliError::user about activation.
+    let assert = maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "delete",
+            "work",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("activated") || stderr.contains("--force"),
+        "stderr should mention activation or --force: {stderr}"
+    );
+
+    // With --force: succeeds.
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "delete",
+            "work",
+            "--force",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn rename_round_trip_repoints_active_default_and_snapshots() {
+    let home = tempfile::tempdir().unwrap();
+
+    // Create profile "from".
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "from",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    // Set active.
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "use",
+            "from",
+        ])
+        .assert()
+        .success();
+
+    // Set as default.
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "default",
+            "from",
+        ])
+        .assert()
+        .success();
+
+    // Rename from -> to.
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "rename",
+            "from",
+            "to",
+        ])
+        .assert()
+        .success();
+
+    // profiles/to/ exists; profiles/from/ does not.
+    assert!(
+        home.path().join("profiles/to").exists(),
+        "profiles/to should exist after rename"
+    );
+    assert!(
+        !home.path().join("profiles/from").exists(),
+        "profiles/from should not exist after rename"
+    );
+
+    // active.txt reads "to".
+    let active = std::fs::read_to_string(home.path().join("active.txt")).unwrap();
+    assert_eq!(active.trim(), "to", "active.txt should now read 'to'");
+
+    // [defaults].profile is "to".
+    let state_text = std::fs::read_to_string(home.path().join("state.toml")).unwrap();
+    assert!(
+        state_text.contains("profile = \"to\""),
+        "state.toml [defaults] should have profile = \"to\": {state_text}"
+    );
+
+    // A backup snapshot exists under backups/.
+    let backups_dir = home.path().join("backups");
+    assert!(backups_dir.exists(), "backups/ directory should exist");
+    let mut snapshot_count = 0;
+    for entry in std::fs::read_dir(&backups_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir() && entry.path().join("state.toml").exists() {
+            snapshot_count += 1;
+        }
+    }
+    assert!(
+        snapshot_count >= 1,
+        "expected at least one state.toml snapshot under backups/"
+    );
+}
+
+#[test]
+fn import_existing_excludes_credentials_and_registers_profile() {
+    let home = tempfile::tempdir().unwrap();
+    let src = tempfile::tempdir().unwrap();
+
+    // Simulate ~/.claude with one benign + one credential file + nested benign.
+    std::fs::write(src.path().join("settings.json"), r#"{"theme":"dark"}"#).unwrap();
+    std::fs::write(src.path().join(".credentials.json"), "SECRET").unwrap();
+    std::fs::create_dir_all(src.path().join("projects")).unwrap();
+    std::fs::write(src.path().join("projects/notes.md"), "hello").unwrap();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "import-existing",
+            "--harness",
+            "claude",
+            "--name",
+            "imported",
+            "--from",
+            src.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let dst = home.path().join("profiles/imported/claude");
+    assert!(
+        dst.join("settings.json").exists(),
+        "settings.json should be present in imported profile"
+    );
+    assert!(
+        dst.join("projects/notes.md").exists(),
+        "nested benign file should be copied"
+    );
+    assert!(
+        !dst.join(".credentials.json").exists(),
+        ".credentials.json must be excluded by deny-list"
+    );
+
+    // state.toml registers the imported profile under claude.
+    let state_text = std::fs::read_to_string(home.path().join("state.toml")).unwrap();
+    assert!(
+        state_text.contains("[profiles.imported]"),
+        "imported profile should be registered: {state_text}"
+    );
+    assert!(
+        state_text.contains("claude"),
+        "claude harness should be recorded: {state_text}"
+    );
+}
+
+#[test]
+fn default_sets_fallback_profile() {
+    let home = tempfile::tempdir().unwrap();
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "create",
+            "work",
+            "--harness",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "default",
+            "work",
+        ])
+        .assert()
+        .success();
+
+    let state_text = std::fs::read_to_string(home.path().join("state.toml")).unwrap();
+    assert!(
+        state_text.contains("profile = \"work\""),
+        "[defaults].profile should be 'work': {state_text}"
+    );
+}
+
+#[test]
+fn default_rejects_invalid_profile_name() {
+    let home = tempfile::tempdir().unwrap();
+    let assert = maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "profile",
+            "default",
+            "has space",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("invalid"),
+        "stderr should mention invalid name: {stderr}"
+    );
+}
+
+fn adapter_status_stdout_contains_harness(id: &str) {
+    let out = maru_cmd()
+        .args(["adapter", "status", id])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    assert!(
+        s.contains(id),
+        "human stdout should mention harness id {id}: {s}"
+    );
+}
+
+fn adapter_status_json_has_id(id: &str) {
+    let out = maru_cmd()
+        .args(["adapter", "status", id, "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&s)
+        .unwrap_or_else(|e| panic!("adapter status --json was not valid JSON: {e}: {s}"));
+    assert_eq!(
+        json.get("id").and_then(serde_json::Value::as_str),
+        Some(id),
+        "json id field should equal {id}: {json}"
+    );
+    let found = json
+        .get("found_at")
+        .unwrap_or_else(|| panic!("missing found_at: {json}"));
+    assert!(
+        found.is_null() || found.is_string(),
+        "found_at must be null or string: {found}"
+    );
+}
+
+#[test]
+fn adapter_status_claude() {
+    adapter_status_stdout_contains_harness("claude");
+    adapter_status_json_has_id("claude");
+}
+
+#[test]
+fn adapter_status_codex() {
+    adapter_status_stdout_contains_harness("codex");
+    adapter_status_json_has_id("codex");
+}
+
+#[test]
+fn adapter_status_gemini() {
+    adapter_status_stdout_contains_harness("gemini");
+    adapter_status_json_has_id("gemini");
+}
+
+#[test]
+fn adapter_status_unknown_harness_is_user_error() {
+    let assert = maru_cmd()
+        .args(["adapter", "status", "aider"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("unknown harness"),
+        "stderr should mention 'unknown harness': {stderr}"
+    );
+    let code = assert.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 1,
+        "CliError::user should exit with code 1, got {code}"
+    );
+}
+
+#[test]
+fn doctor_surfaces_phase_1_limitations() {
+    let home = tempfile::tempdir().unwrap();
+
+    // JSON form: `notes` array contains the documented carve-out strings.
+    let out = maru_cmd()
+        .args([
+            "--maru-home",
+            home.path().to_str().unwrap(),
+            "doctor",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    let json: serde_json::Value =
+        serde_json::from_str(&s).unwrap_or_else(|e| panic!("doctor --json invalid: {e}: {s}"));
+    let notes = json
+        .get("notes")
+        .and_then(serde_json::Value::as_array)
+        .unwrap_or_else(|| panic!("missing notes array: {json}"));
+    let joined = notes
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        joined.contains("extension hosts"),
+        "notes should mention extension hosts: {joined}"
+    );
+    assert!(
+        joined.contains("GUI-launched IDEs"),
+        "notes should mention GUI-launched IDEs: {joined}"
+    );
+
+    // Human form: same substrings appear on stdout.
+    let out = maru_cmd()
+        .args(["--maru-home", home.path().to_str().unwrap(), "doctor"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    assert!(
+        s.contains("extension hosts"),
+        "human stdout should mention extension hosts: {s}"
+    );
+    assert!(
+        s.contains("GUI-launched IDEs"),
+        "human stdout should mention GUI-launched IDEs: {s}"
+    );
 }
 
 #[test]

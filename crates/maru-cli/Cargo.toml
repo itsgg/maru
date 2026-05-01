@@ -38,6 +38,8 @@ self-replace = { workspace = true }
 tempfile = { workspace = true }
 assert_cmd = { workspace = true }
 predicates = { workspace = true }
+maru-store = { path = "../maru-store" }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

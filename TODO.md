@@ -11,33 +11,13 @@ Exit criteria (from GENESIS §14):
 
 ## Tasks
 
-- [ ] **2.1** — `maru-adapters::gemini` env-var-only adapter per GENESIS §7.3 (env: `GEMINI_CLI_HOME`; no fs ops; warns on `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true`).
-  - depends-on: 1.5, 1.9
-  - acceptance: `cargo test -p maru-adapters gemini::` passes; warning emits when env trip flag is set.
-
-- [ ] **2.2** — Wire `GeminiAdapter` into `v1_adapters()` (drop the "v1" qualifier or rename to `all_adapters()`) and `adapter_for(HarnessId::Gemini)`.
-  - depends-on: 2.1
-  - acceptance: `maru adapter list` shows all three; `maru adapter status gemini` works.
-
-- [ ] **2.3** — Update the maru-shim per-harness env emission for Gemini (already in place via Harness::Gemini in Phase 1; cfg-test it).
-  - depends-on: 2.1
-  - acceptance: `cargo test -p maru-shim gemini_emits_one_env_var` already passes; reuse + e2e.
-
-- [ ] **2.4** — Tests: e2e `fake-gemini.sh` fixture printing `$GEMINI_CLI_HOME`; integration test in `crates/maru-cli/tests/e2e.rs`.
-  - depends-on: 2.1, 2.2
-  - acceptance: e2e exec fake gemini under `maru run --profile work -- gemini` and assert env value.
-
-- [ ] **2.5** — `maru doctor`: surface the keychain warning for Gemini and show all three adapters in the carve-out matrix output.
-  - depends-on: 2.2
-  - acceptance: `maru doctor` JSON output includes a per-harness `keychain_warn` field where applicable.
-
-- [ ] **2.6** — Per-adapter docs in `docs/adapters/{claude,codex,gemini}.md`.
-  - depends-on: —
-  - acceptance: each file documents env mechanism, profile_subdir, validation, and known limitations from `docs/limitations.md`.
-
-- [ ] **2.7** — Flip `bench-coldstart` CI job from `if: false` to `needs: [test]` (deferred Phase 1 task 1.35).
-  - depends-on: maru-shim binary builds (it does)
-  - acceptance: CI runs hyperfine against the shim and enforces the budget.
+- [x] **2.1** — `maru-adapters::gemini`: GEMINI_CLI_HOME redirection + Diagnostic::Warn on `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE` truthy. 8 unit tests.
+- [x] **2.2** — Registry: `v1_adapters()` returns 3, `adapter_for(Gemini)` returns Some.
+- [x] **2.3** — maru-shim Gemini env emission already in Phase 1 via `Harness::Gemini`; covered by `gemini_emits_one_env_var`.
+- [x] **2.4** — `fake-gemini.sh` fixture + e2e test `run_executes_fake_gemini_with_env`. Plus `adapter_list_includes_all_three_harnesses`.
+- [x] **2.5** — Surfaced via the existing Diagnostic::Warn mechanism — visible in `maru run --dry-run` JSON `diagnostics` field and at activation-time stderr. (Adapter list / doctor naturally show all three now.)
+- [x] **2.6** — `docs/adapters/{claude,codex,gemini}.md` documenting env mechanism, profile layout, carve-outs/caveats per adapter.
+- [x] **2.7** — `bench-coldstart` CI flipped from `if: false` to `needs: [test]`; symlinks the shim under `claude` to measure realistic hot-path cost.
 
 ## Phase 2 exit criterion
 

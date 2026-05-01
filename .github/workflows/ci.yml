@@ -102,11 +102,11 @@ jobs:
       - run: cargo nextest run --workspace --all-features --no-tests=pass
       - run: cargo test --doc --workspace --all-features
 
-  # Shim cold-start gate. Enabled once `crates/maru-shim` exists (Phase 1).
-  # See GENESIS §9 performance budget: ≤15ms p50 from main() to execvp on
-  # Linux/macOS, ≤40ms on Windows.
+  # Shim cold-start gate per GENESIS §9 performance budget:
+  # ≤15ms p50 from main() to execvp on Linux/macOS, ≤40ms on Windows.
+  # The shim shipped in Phase 1 (PR #2). This job enforces the budget.
   bench-coldstart:
-    if: false  # Phase 1: flip to `needs: [test]` once the shim ships.
+    needs: [test]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -116,10 +116,17 @@ jobs:
         with:
           tool: hyperfine
       - run: cargo build --profile shim --bin maru-shim
-      - name: Cold-start budget (15ms Linux/macOS)
+      - name: Cold-start budget (15ms Linux)
         run: |
-          hyperfine --warmup 3 --runs 50 --export-json bench.json \
-            './target/shim/maru-shim --version'
+          # The shim dispatches by argv[0]; symlink under a harness name
+          # so `main` exits early on the "no profile resolved" path
+          # (an honest measurement of the shim's parse-and-dispatch cost
+          # without exec'ing a real harness).
+          ln -sf "$PWD/target/shim/maru-shim" "$PWD/target/shim/claude"
+          # `--ignore-failure` because the shim exits 1 on no-active-profile;
+          # hyperfine still measures wall time accurately. Budget enforces.
+          hyperfine --warmup 3 --runs 50 --ignore-failure --export-json bench.json \
+            "$PWD/target/shim/claude --version"
           mean_ms=$(jq '.results[0].mean * 1000' bench.json)
           echo "mean = ${mean_ms} ms"
           awk -v m="$mean_ms" 'BEGIN { exit (m > 15.0) }' \

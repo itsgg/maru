@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8] - 2026-05-01
+
+### Fixed
+
+- `maru profile login` was launching `claude setup-token` via PATH resolution, which the maru shim intercepts: it sets `CLAUDE_CODE_OAUTH_TOKEN` from the active profile's `oauth_token` file before exec'ing real claude. If that token was stale or invalid (e.g. from a previous broken alpha), `setup-token` would inherit it and either skip the browser OAuth flow or hang trying to validate it. Now `maru profile login` resolves the real claude binary by walking PATH and skipping the shim dir, then strips `CLAUDE_CONFIG_DIR` / `CLAUDE_CODE_PLUGIN_CACHE_DIR` / `CLAUDE_CODE_OAUTH_TOKEN` from the spawn env so `setup-token` runs in a clean environment regardless of which profile is currently active.
+
 ## [0.1.0-alpha.7] - 2026-05-01
 
 ### Fixed

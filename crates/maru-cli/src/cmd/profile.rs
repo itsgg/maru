@@ -766,7 +766,7 @@ fn login(ctx: &CliContext, args: LoginArgs) -> Result<()> {
     let token = if args.stdin {
         read_token_from_stdin().context("read token from stdin")?
     } else {
-        run_claude_setup_token_and_capture(&name)?
+        run_claude_setup_token_and_capture(ctx, &name)?
     };
     if token.is_empty() {
         bail!(CliError::user("no token captured — aborting"));
@@ -804,22 +804,40 @@ fn read_token_from_stdin() -> Result<String> {
 /// Run `claude setup-token` with full stdio inheritance, then prompt
 /// the user to paste the token printed at the end.
 ///
-/// Earlier versions of this function piped stdout to capture the token
-/// automatically, which broke Claude Code's TUI rendering (it detects
-/// the pipe and re-renders the splash repeatedly) and reliably grabbed
-/// the wrong line — usually the hint `Use this token by setting:
-/// export CLAUDE_CODE_OAUTH_TOKEN=<token>` rather than the actual
-/// token a few lines below.
+/// Critical: bypass the maru shim. If we let PATH resolution find
+/// `claude`, the shim intercepts (it owns `<MARU_HOME>/bin/claude`
+/// prepended to PATH) and exports the active profile's
+/// `CLAUDE_CODE_OAUTH_TOKEN` env var into the child — which means
+/// `setup-token` inherits a (possibly stale or broken) token and
+/// either skips the OAuth flow or hangs trying to validate it. We
+/// resolve the *real* claude binary by walking PATH and skipping the
+/// shim dir, then explicitly strip every `CLAUDE_*` env var we
+/// control so `setup-token` runs in a clean environment.
 ///
-/// The simplest correct UX: let `setup-token` run with a real TTY so
-/// its OAuth flow + token display work normally, then ask the user to
-/// paste the printed token. They can scroll back if they need to.
-fn run_claude_setup_token_and_capture(profile: &ProfileName) -> Result<String> {
+/// Earlier versions piped stdout to auto-extract the token; that
+/// broke the TUI (it detects the pipe and re-renders the splash
+/// repeatedly) and reliably grabbed the hint line `Use this token
+/// by setting: export CLAUDE_CODE_OAUTH_TOKEN=<token>` rather than
+/// the actual token. The current flow is full stdio inheritance,
+/// OAuth runs normally, user pastes the token afterwards.
+fn run_claude_setup_token_and_capture(ctx: &CliContext, profile: &ProfileName) -> Result<String> {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
+    let env = maru_core::SystemEnvironment::new();
+    let shim_dir = ctx.shim_install_dir();
+    let real_claude = maru_core::Environment::which_skipping(&env, "claude", &shim_dir)
+        .ok_or_else(|| {
+            CliError::user(
+                "could not find a real `claude` binary on PATH outside the maru shim dir. \
+                 Install Claude Code first (e.g. `npm i -g @anthropic-ai/claude-code` or \
+                 the official installer) and re-run.",
+            )
+        })?;
+
     eprintln!(
-        "maru: launching `claude setup-token` for profile {:?}.",
+        "maru: launching `{} setup-token` for profile {:?} (bypassing the maru shim).",
+        real_claude.display(),
         profile.as_str()
     );
     eprintln!(
@@ -828,13 +846,19 @@ fn run_claude_setup_token_and_capture(profile: &ProfileName) -> Result<String> {
     );
     eprintln!();
 
-    let status = Command::new("claude")
+    let status = Command::new(&real_claude)
         .arg("setup-token")
+        // Strip the shim's redirection env vars so setup-token runs
+        // against the user's normal Claude Code config (not against a
+        // per-profile dir or with a stale per-profile token).
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .env_remove("CLAUDE_CODE_PLUGIN_CACHE_DIR")
+        .env_remove("CLAUDE_CODE_OAUTH_TOKEN")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .context("spawn `claude setup-token` (is `claude` on PATH? install Claude Code first)")?;
+        .with_context(|| format!("spawn {} setup-token", real_claude.display()))?;
 
     if !status.success() {
         bail!(CliError::user(format!(

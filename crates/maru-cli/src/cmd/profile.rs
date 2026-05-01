@@ -854,7 +854,12 @@ fn run_claude_setup_token_and_capture(profile: &ProfileName) -> Result<String> {
     Ok(last_line)
 }
 
-/// Write `token` to `path` with mode 0600 on Unix (best-effort).
+/// Write `token` to `path` with mode 0600 on Unix.
+///
+/// `OpenOptionsExt::mode` only applies on creation, so when the file
+/// already exists with looser perms (e.g. `0644`), truncating preserves
+/// them. Explicitly `chmod` after the write to enforce the intent
+/// regardless of pre-existing mode.
 fn write_token_file(path: &std::path::Path, token: &str) -> std::io::Result<()> {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -868,6 +873,13 @@ fn write_token_file(path: &std::path::Path, token: &str) -> std::io::Result<()> 
     let mut f = opts.open(path)?;
     f.write_all(token.as_bytes())?;
     f.write_all(b"\n")?;
+    drop(f);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }
 

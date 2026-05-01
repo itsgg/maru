@@ -29,6 +29,10 @@ allow = [
     "Unicode-3.0",
     "Zlib",
     "MPL-2.0",
+    # webpki-roots ships the Mozilla CA bundle under CDLA-Permissive-2.0
+    # (Linux Foundation's permissive data license). Reached via `ureq`'s
+    # rustls feature for `maru update`.
+    "CDLA-Permissive-2.0",
 ]
 
 [bans]

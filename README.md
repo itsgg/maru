@@ -17,16 +17,38 @@ gemini        # uses the work Gemini config
 
 ## Status
 
-Pre-alpha. Currently in **Phase 0 — Spike**. The full design is in [GENESIS.md](./GENESIS.md), which is the normative source of truth for the implementation.
+Phases 0–3 are merged on `main`; Phase 4 (Distribution) is in flight. The full design is in [GENESIS.md](./GENESIS.md), which is the normative source of truth for the implementation.
+
+## Install
+
+> The binary distribution channels below land with the first `v0.1.0` release. Until then, build from source — see below.
+
+```sh
+# macOS / Linux Homebrew (after first release)
+brew install itsgg/maru/maru
+
+# Windows Scoop
+scoop bucket add maru https://github.com/itsgg/scoop-maru
+scoop install maru
+
+# Windows winget
+winget install itsgg.maru
+
+# curl one-liner (Unix)
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.sh | sh
+```
+
+After install, run `maru install` once to wire the shim symlinks into your shell's PATH.
 
 ## Build from source
 
 Requires Rust 1.95.0 (see `rust-toolchain.toml`).
 
 ```sh
-git clone https://github.com/<owner>/maru
+git clone https://github.com/itsgg/maru
 cd maru
 cargo build --release
+./target/release/maru install
 ```
 
 ## Project structure

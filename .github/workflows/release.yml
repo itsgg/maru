@@ -1,0 +1,106 @@
+# Release workflow — driven by `dist`. Triggered by semver tags.
+#
+# Re-generate from dist-workspace.toml with `dist init` (which writes
+# this file with up-to-date matrix + steps for the dist version pinned
+# in dist-workspace.toml). Hand-edits here will be overwritten.
+#
+# DO NOT manually trigger this workflow — push a `v*.*.*` tag instead.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+  pull_request:  # for `dist plan` dry-runs only
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  DIST_VERSION: "0.31.0"
+
+jobs:
+  # Plan-only on PRs. dist computes what would be released without
+  # actually building anything.
+  plan:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: dist@${{ env.DIST_VERSION }}
+      - run: dist plan
+
+  # Real release: build + upload + publish.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-apple-darwin
+            os: macos-14
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: dist@${{ env.DIST_VERSION }}
+      - name: Build
+        run: dist build --target ${{ matrix.target }} --output-format=json > dist-output.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: target/distrib/
+          if-no-files-found: error
+
+  # Publish phase: create the GitHub Release, upload assets, push the
+  # Homebrew tap update.
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: dist@${{ env.DIST_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: target/distrib/
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # User must provision in GitHub repo Secrets:
+          # HOMEBREW_TAP_TOKEN — PAT with `contents:write` on `itsgg/homebrew-maru`
+          # APPLE_TEAM_ID, APPLE_NOTARY_USER, APPLE_NOTARY_PASSWORD — for macOS notarization
+          # WINDOWS_CERTIFICATE_BASE64, WINDOWS_CERTIFICATE_PASSWORD — for Windows code signing
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: dist host announce

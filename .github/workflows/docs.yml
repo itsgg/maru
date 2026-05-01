@@ -1,0 +1,52 @@
+# Build mdBook docs site and publish to GitHub Pages.
+# Triggered on push to main or workflow_dispatch.
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: "0.4.43"
+      - name: Build mdBook
+        run: |
+          if [ -f docs/book/book.toml ]; then
+            mdbook build docs/book
+          else
+            echo "::warning::docs/book/book.toml missing — skipping mdBook build"
+            mkdir -p docs/book/book
+            cp -r docs/* docs/book/book/ 2>/dev/null || true
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/book/book
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

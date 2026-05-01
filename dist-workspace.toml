@@ -1,0 +1,65 @@
+# `dist` config (formerly cargo-dist). Run: `dist init` once to update;
+# `dist plan` to dry-run; `dist build` to produce artifacts.
+# https://github.com/axodotdev/cargo-dist
+#
+# This file is the source of truth for what platforms we ship and how
+# users install. release.yml is regenerated from here via `dist generate`.
+
+[workspace]
+members = ["cargo:."]
+
+[dist]
+# Pinned to a specific release for reproducibility. Bump deliberately.
+cargo-dist-version = "0.31.0"
+
+# Use GitHub Releases as the artifact host.
+ci = "github"
+hosting = ["github"]
+
+# Targets per GENESIS §15 cross-platform matrix.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+# Installers — what users invoke to install.
+installers = [
+    "shell",       # curl -sSL ... | sh
+    "powershell",  # iwr ... | iex
+    "homebrew",    # brew install <tap>/maru
+]
+# winget: not yet — requires per-release manifest PRs. See docs/notes/phase-4-handoff.md.
+# scoop:  same — manifest PR per release. Tracked in handoff.
+
+# Homebrew tap. The user must create this repo (empty, public) and grant
+# the GitHub App / dist token access. See handoff doc.
+tap = "itsgg/homebrew-maru"
+
+# Pre-release marker for tags matching `v0.*`. Phase 4 ships `v0.1.0`
+# as the first dist-managed release; v1.0.0 graduates to "stable".
+pr-run-mode = "plan"
+
+# Which binaries to ship from each crate.
+[dist.binaries]
+"maru-cli" = ["maru"]
+"maru-shim" = ["maru-shim"]
+
+# Build the shim under [profile.shim] (lto=fat, opt-level=z, strip)
+# for the cold-start budget. The CLI uses [profile.release].
+[dist.dependencies.profile-overrides]
+"maru-shim" = "shim"
+
+# Auto-include alongside binaries.
+include = ["LICENSE-APACHE", "LICENSE-MIT", "README.md", "CHANGELOG.md"]
+
+# Source tarballs go in too.
+source-tarball = true
+
+# After release, dist auto-PRs the Homebrew formula to the tap repo.
+publish-jobs = ["homebrew"]
+
+# `dist init`-generated default. We can extend later for cargo-installer or msi.
+allow-dirty = ["ci"]

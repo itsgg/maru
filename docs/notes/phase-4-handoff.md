@@ -47,9 +47,28 @@ git push origin v0.1.0-alpha.0
 
 After the run:
 
-- The GitHub Release page should have one artifact per target per binary (5 tarballs/zips × 2 binaries + checksums + installers + formulas).
-- `itsgg/homebrew-maru` should have new commits for `Formula/maru-cli.rb` and `Formula/maru-shim.rb`.
-- `brew install itsgg/maru/maru-cli itsgg/maru/maru-shim && maru install` should now work end-to-end.
+- The GitHub Release page should have one artifact per target per binary (5 tarballs/zips × 2 binaries + checksums + installers + per-package formulas).
+- The release also produces per-package `maru-cli.rb` and `maru-shim.rb` formulas. dist would auto-PR these to `itsgg/homebrew-maru` if `HOMEBREW_TAP_TOKEN` is set.
+- The user-facing brew tap exposes a hand-maintained single `maru.rb` formula at `itsgg/homebrew-maru/Formula/maru.rb` that uses Homebrew's `resource` feature to pull both binaries. Per-release, regenerate it from the dist-produced `maru-cli.rb` + `maru-shim.rb` (URLs and SHAs change every tag) and push to the tap. See [Updating the brew formula](#updating-the-brew-formula) below.
+- `brew install itsgg/maru/maru && maru install` should work end-to-end.
+
+## Updating the brew formula
+
+We hand-maintain `itsgg/homebrew-maru/Formula/maru.rb` (one user-facing formula, both binaries) instead of using the per-package formulas dist generates. To update for a new release:
+
+1. Wait for `release.yml` to finish on the tagged commit.
+2. Pull the per-package formulas from the release:
+   ```sh
+   gh release download <tag> --repo itsgg/maru --pattern '*.rb' -D ./formulas
+   ```
+3. Open `./formulas/maru-cli.rb` and `./formulas/maru-shim.rb`. The interesting bits are the `version` and the per-platform `url` + `sha256` blocks.
+4. Edit `Formula/maru.rb` in the tap repo:
+   - bump `version`
+   - replace each platform's main `url` + `sha256` (these come from `maru-cli.rb`)
+   - replace each platform's resource `url` + `sha256` inside `resource "maru-shim"` (these come from `maru-shim.rb`)
+5. Commit and push to `itsgg/homebrew-maru`.
+
+This is per-release manual work. To eliminate it, either (a) set `HOMEBREW_TAP_TOKEN` and accept the two-formula split that dist generates natively, or (b) write a generator that emits the unified `maru.rb` from the dist outputs.
 
 ## What to expect from `dist init`
 

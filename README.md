@@ -17,11 +17,26 @@ gemini        # uses the work Gemini config
 
 ## Status
 
-Phases 0–3 are merged on `main`; Phase 4 (Distribution) is in flight. The full design is in [GENESIS.md](./GENESIS.md), which is the normative source of truth for the implementation.
+Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag triggers binary distribution (see [phase-4-handoff](docs/notes/phase-4-handoff.md)). The full design is in [GENESIS.md](./GENESIS.md), which is the normative source of truth for the implementation.
 
 ## Install
 
-> The binary distribution channels below land with the first `v0.1.0` release. Until then, build from source — see below.
+Until the first release is tagged, build from source — that's the only path that works today.
+
+### Build from source
+
+Requires Rust 1.95.0 (see `rust-toolchain.toml`).
+
+```sh
+git clone https://github.com/itsgg/maru
+cd maru
+cargo build --release
+./target/release/maru install
+```
+
+### After v0.1.0 release (placeholders)
+
+The one-liners below go live once the maintainer creates the Homebrew tap (`itsgg/homebrew-maru`) and tags `v0.1.0-alpha.0`. They will not work before then.
 
 ```sh
 # macOS / Linux Homebrew (after first release)
@@ -40,17 +55,6 @@ curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.
 
 After install, run `maru install` once to wire the shim symlinks into your shell's PATH.
 
-## Build from source
-
-Requires Rust 1.95.0 (see `rust-toolchain.toml`).
-
-```sh
-git clone https://github.com/itsgg/maru
-cd maru
-cargo build --release
-./target/release/maru install
-```
-
 ## Project structure
 
 ```
@@ -64,8 +68,7 @@ maru/
 │   ├── maru-activation/    # Env application + exec
 │   ├── maru-cli/           # The `maru` binary
 │   └── maru-shim/          # The hot-path shim binary
-├── docs/                   # mdBook source + spike findings
-└── tests/e2e/              # End-to-end tests against fake harnesses
+└── docs/                   # mdBook source + spike findings
 ```
 
 ## Contributing

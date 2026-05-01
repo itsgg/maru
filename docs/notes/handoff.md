@@ -1,5 +1,7 @@
 # Operator handoff — autonomous mode (no-halt + cron)
 
+> **STATUS: archived — phases 0–4 complete.** This file is operator-mode for the now-defunct `/autopilot` cron loop. It is preserved for historical reference. Post-merge user actions for the current state of the project live in [`phase-4-handoff.md`](phase-4-handoff.md).
+
 This is the one-pager. The loop runs unattended; you triage open issues at your own cadence.
 
 ## What's running

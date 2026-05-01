@@ -128,6 +128,6 @@ This document is appended to as autopilot runs each Phase 0 task. A finding mark
 
 **Action items for Phase 1:**
 
-- Add a Linux CI runner that disables the keyring to verify the §7.1 credential gate.
-- Add a `live-smoke` nightly job to verify carve-outs (#47056, #42217, #15071) end-to-end with real OAuth sessions in a sealed credential store.
-- Apply the GENESIS §7.2 update from finding 0.5 before implementing the Codex adapter.
+- Add a Linux CI runner that disables the keyring to verify the §7.1 credential gate. **Status: pending** (still open after Phase 1).
+- Add a `live-smoke` nightly job to verify carve-outs (#47056, #42217, #15071) end-to-end with real OAuth sessions in a sealed credential store. **Status: pending** the user provisioning the necessary credentials infrastructure (tracked in [`notes/phase-4-handoff.md`](notes/phase-4-handoff.md)).
+- Apply the GENESIS §7.2 update from finding 0.5 before implementing the Codex adapter. **Status: resolved** in commit `f259ad8`.

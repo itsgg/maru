@@ -9,7 +9,7 @@ src = "src"
 default-theme = "rust"
 preferred-dark-theme = "ayu"
 git-repository-url = "https://github.com/itsgg/maru"
-edit-url-template = "https://github.com/itsgg/maru/edit/main/docs/book/{path}"
+edit-url-template = "https://github.com/itsgg/maru/edit/main/docs/book/src/{path}"
 fold = { enable = true, level = 1 }
 
 [output.html.search]

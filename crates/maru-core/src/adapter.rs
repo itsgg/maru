@@ -159,8 +159,8 @@ mod tests {
     fn plan_returns_env_for_absolute_profile_root() {
         let a = TestAdapter;
         let name = ProfileName::new("work").unwrap();
-        let root = PathBuf::from("/var/maru/profiles/work");
-        let home = PathBuf::from("/Users/gg");
+        let root = std::env::temp_dir().join("maru-test/profiles/work");
+        let home = std::env::temp_dir().join("maru-test/home");
         let ctx = ProfileContext {
             profile_name: &name,
             profile_root: &root,

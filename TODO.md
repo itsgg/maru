@@ -72,12 +72,8 @@ End-to-end smoke verified locally: `maru profile create work --harness claude,co
 
 ## Tests + docs
 
-- [ ] **1.36** — E2E test with `tests/e2e/fake-claude.sh` + `fake-codex.sh` _(GENESIS §14)_
-  - depends-on: 1.33
-  - acceptance: shells print env; assertions verify values per active profile.
-- [ ] **1.37** — `docs/install.md`, `docs/quickstart.md`, `docs/limitations.md` _(GENESIS §14)_
-  - depends-on: —
-  - acceptance: published; `docs/limitations.md` covers all §7.1 carve-outs.
+- [x] **1.36** — `crates/maru-cli/tests/e2e.rs` with `fake-claude.sh` + `fake-codex.sh` fixtures. Verifies CLAUDE_CONFIG_DIR + CLAUDE_CODE_PLUGIN_CACHE_DIR + CODEX_HOME are set and forwarded; argv passes through; profile create/list/use/current round-trip; doctor + version + schema run clean. _(GENESIS §14)_
+- [x] **1.37** — `docs/install.md`, `docs/quickstart.md`, `docs/limitations.md`. Limitations explicitly enumerates extension-host gap, GUI-launched IDEs, concurrent-switch fail-soft, all §7.1 carve-outs (#47056, #42217, #30538), Codex keyring storage caveat, Gemini `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE` warning, and Phase 0 deferred-to-live-smoke checks. _(GENESIS §14)_
 
 ## Phase 1 exit criterion
 

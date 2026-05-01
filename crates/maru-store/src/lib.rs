@@ -13,12 +13,13 @@ pub mod deny_list;
 pub(crate) mod lock;
 pub mod profile_dirs;
 pub mod resolve;
+pub mod scrub;
 pub mod snapshot;
 pub mod state;
 pub mod time;
 
 pub use profile_dirs::{apply_seed, apply_seeds, ensure_profile_dirs, profile_subdir};
-pub use resolve::{Resolved, Source, resolve};
+pub use resolve::{PinLookup, Resolved, Source, resolve, walk_for_pin};
 pub use snapshot::snapshot_state;
 pub use state::{CURRENT_SCHEMA_VERSION, Defaults, ProfileEntry, State};
 pub use time::{epoch_to_iso8601, now_iso8601};
@@ -61,5 +62,18 @@ pub enum Error {
     ProfileExists {
         /// The duplicate name.
         name: String,
+    },
+
+    /// A `.maru` file was found, but its first line does not parse as a
+    /// valid [`maru_core::ProfileName`]. GENESIS §12 mandates that this
+    /// is a hard error, not a silent fall-through to `active.txt`.
+    #[error(
+        ".maru at {path:?} contains invalid profile name {line:?}; refusing to silently fall back"
+    )]
+    InvalidPin {
+        /// Path to the offending `.maru` file.
+        path: PathBuf,
+        /// The raw first line that failed to parse.
+        line: String,
     },
 }

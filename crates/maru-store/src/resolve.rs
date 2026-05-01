@@ -2,7 +2,7 @@
 //!
 //! GENESIS §10 "Profile-resolution sources" table.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use maru_core::{Environment, ProfileName};
 
@@ -30,6 +30,38 @@ pub struct Resolved {
     pub source: Source,
 }
 
+/// Outcome of walking up from `cwd` looking for a `.maru` file.
+///
+/// GENESIS §12: an unknown / invalid profile name in `.maru` is an
+/// explicit user-error condition, NOT a silent fall-through to the next
+/// resolution source. This 3-state result lets callers distinguish:
+///
+/// - [`PinLookup::NotFound`] — no `.maru` was found anywhere up the
+///   chain. Callers continue resolution with `active.txt` / defaults.
+/// - [`PinLookup::Found`] — a `.maru` with a valid profile name. Use it.
+/// - [`PinLookup::Invalid`] — a `.maru` exists but its first line does
+///   not parse as a [`ProfileName`]. Callers must surface this as a
+///   typed error rather than silently continuing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PinLookup {
+    /// No `.maru` file in or above `cwd`.
+    NotFound,
+    /// Valid pin found.
+    Found {
+        /// The resolved profile name.
+        name: ProfileName,
+        /// The directory containing the `.maru` file.
+        pin_dir: PathBuf,
+    },
+    /// A `.maru` file exists but its first line is not a valid profile name.
+    Invalid {
+        /// Path to the offending `.maru` file.
+        path: PathBuf,
+        /// The raw first line that failed to parse, trimmed.
+        line: String,
+    },
+}
+
 /// Resolve the active profile name following the GENESIS §10 source
 /// order.
 ///
@@ -41,7 +73,10 @@ pub struct Resolved {
 ///
 /// # Errors
 ///
-/// Returns [`Error`] on I/O failures reading `active.txt` or `state.toml`.
+/// Returns [`Error`] on I/O failures reading `active.txt` or `state.toml`,
+/// **or** [`Error::InvalidPin`] if a `.maru` file is present but its
+/// first line does not parse as a valid profile name (GENESIS §12: this
+/// is a hard error, not a silent fall-through).
 pub fn resolve(
     env: &dyn Environment,
     maru_home: &Path,
@@ -62,13 +97,21 @@ pub fn resolve(
     }
 
     // 2. .maru file walked from cwd upward, stopping at $HOME or root.
-    if let Some(cwd) = cwd
-        && let Some(name) = walk_for_pin(cwd, env.home_dir().as_deref())?
-    {
-        return Ok(Some(Resolved {
-            name,
-            source: Source::Pin,
-        }));
+    //    GENESIS §12: an invalid name in .maru is a hard error — never
+    //    silently fall through to active.txt.
+    if let Some(cwd) = cwd {
+        match walk_for_pin(cwd, env.home_dir().as_deref())? {
+            PinLookup::Found { name, .. } => {
+                return Ok(Some(Resolved {
+                    name,
+                    source: Source::Pin,
+                }));
+            }
+            PinLookup::Invalid { path, line } => {
+                return Err(Error::InvalidPin { path, line });
+            }
+            PinLookup::NotFound => {}
+        }
     }
 
     // 3. active.txt
@@ -94,25 +137,44 @@ pub fn resolve(
 }
 
 /// Walk up from `start` looking for a `.maru` file; stop at `home_dir` or
-/// the filesystem root, whichever comes first. Return the first hit.
+/// the filesystem root, whichever comes first.
+///
+/// Returns the first hit's outcome:
+/// - [`PinLookup::Found`] — a `.maru` with a valid profile name.
+/// - [`PinLookup::Invalid`] — a `.maru` exists but its first line does
+///   not parse as a valid profile name. GENESIS §12 mandates this is a
+///   hard error, not a silent fall-through.
+/// - [`PinLookup::NotFound`] — no `.maru` was found anywhere up to
+///   `home_dir` / the filesystem root.
 ///
 /// # Errors
 ///
-/// I/O errors during file-read are surfaced; "not found" yields `Ok(None)`.
-fn walk_for_pin(start: &Path, home_dir: Option<&Path>) -> Result<Option<ProfileName>, Error> {
+/// I/O errors during file-read are surfaced as [`Error::Io`].
+pub fn walk_for_pin(start: &Path, home_dir: Option<&Path>) -> Result<PinLookup, Error> {
     let mut current: Option<&Path> = Some(start);
     while let Some(dir) = current {
         let candidate = dir.join(".maru");
         match std::fs::read(&candidate) {
             Ok(bytes) => {
                 let text = String::from_utf8_lossy(&bytes);
-                if let Some(line) = text.lines().next()
-                    && !line.trim().is_empty()
-                    && let Ok(name) = ProfileName::new(line.trim())
-                {
-                    return Ok(Some(name));
+                let raw_line = text.lines().next().unwrap_or("").trim().to_owned();
+                if raw_line.is_empty() {
+                    // An empty .maru file is an explicit "no pin"
+                    // signal; not invalid, just absent. Treat as not
+                    // found so resolution falls through naturally.
+                    return Ok(PinLookup::NotFound);
                 }
-                return Ok(None);
+                let result = ProfileName::new(raw_line.clone()).map_or_else(
+                    |_| PinLookup::Invalid {
+                        path: candidate.clone(),
+                        line: raw_line.clone(),
+                    },
+                    |name| PinLookup::Found {
+                        name,
+                        pin_dir: dir.to_path_buf(),
+                    },
+                );
+                return Ok(result);
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(source) => {
@@ -130,7 +192,7 @@ fn walk_for_pin(start: &Path, home_dir: Option<&Path>) -> Result<Option<ProfileN
         }
         current = dir.parent();
     }
-    Ok(None)
+    Ok(PinLookup::NotFound)
 }
 
 #[cfg(test)]
@@ -141,7 +203,8 @@ fn walk_for_pin(start: &Path, home_dir: Option<&Path>) -> Result<Option<ProfileN
     reason = "tests"
 )]
 mod tests {
-    use super::{Source, resolve};
+    use super::{PinLookup, Source, resolve, walk_for_pin};
+    use crate::Error;
     use crate::state::{Defaults, ProfileEntry, State, write as write_state};
     use maru_core::{FakeEnvironment, HarnessId, ProfileName};
 
@@ -237,11 +300,79 @@ mod tests {
     }
 
     #[test]
-    fn pin_with_invalid_name_falls_through() {
+    fn pin_with_invalid_name_returns_typed_error() {
+        // GENESIS §12: a `.maru` containing an invalid profile name must
+        // surface as a typed error, not silently fall through to
+        // active.txt (which would hide the user's intent).
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("repo");
         std::fs::create_dir_all(&project).unwrap();
-        std::fs::write(project.join(".maru"), "-not-valid\n").unwrap();
+        let pin_path = project.join(".maru");
+        std::fs::write(&pin_path, "-not-valid\n").unwrap();
+        // Active profile would otherwise mask the failure if we fell through:
+        crate::active::write(dir.path(), Some(&ProfileName::new("active").unwrap())).unwrap();
+
+        let env = FakeEnvironment::new().with_home(dir.path());
+        let err = resolve(&env, dir.path(), Some(&project)).unwrap_err();
+        match err {
+            Error::InvalidPin { path, line } => {
+                assert_eq!(path, pin_path);
+                assert_eq!(line, "-not-valid");
+            }
+            other => panic!("expected Error::InvalidPin, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn walk_for_pin_returns_invalid_for_bad_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("repo");
+        std::fs::create_dir_all(&project).unwrap();
+        let pin_path = project.join(".maru");
+        std::fs::write(&pin_path, "-not-valid\n").unwrap();
+
+        let res = walk_for_pin(&project, Some(dir.path())).unwrap();
+        match res {
+            PinLookup::Invalid { path, line } => {
+                assert_eq!(path, pin_path);
+                assert_eq!(line, "-not-valid");
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn walk_for_pin_returns_found_for_valid_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("repo");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join(".maru"), "work\n").unwrap();
+
+        let res = walk_for_pin(&project, Some(dir.path())).unwrap();
+        match res {
+            PinLookup::Found { name, pin_dir } => {
+                assert_eq!(name.as_str(), "work");
+                assert_eq!(pin_dir, project);
+            }
+            other => panic!("expected Found, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn walk_for_pin_returns_not_found_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let res = walk_for_pin(dir.path(), Some(dir.path())).unwrap();
+        assert_eq!(res, PinLookup::NotFound);
+    }
+
+    #[test]
+    fn empty_pin_file_treated_as_not_found() {
+        // An empty .maru file is a no-op signal, not an error: resolution
+        // continues with active.txt / defaults.
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("repo");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join(".maru"), "").unwrap();
         crate::active::write(dir.path(), Some(&ProfileName::new("active").unwrap())).unwrap();
 
         let env = FakeEnvironment::new().with_home(dir.path());

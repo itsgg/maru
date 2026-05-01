@@ -102,7 +102,7 @@ fn run() -> Result<(), ShimError> {
     let cwd =
         std::env::current_dir().map_err(|e| ShimError::env(format!("could not get cwd: {e}")))?;
 
-    let profile_name = resolve_profile(&maru_home, &home_dir, &cwd).ok_or_else(|| {
+    let profile_name = resolve_profile(&maru_home, &home_dir, &cwd)?.ok_or_else(|| {
         ShimError::user(
             "no maru profile is active. \
              Set MARU_PROFILE, create a .maru file, or run `maru profile use <name>`."
@@ -114,11 +114,27 @@ fn run() -> Result<(), ShimError> {
     let profile_root = maru_home.join("profiles").join(&profile_name);
     let env_pairs = harness.env_for_profile(&profile_root);
 
-    // 4. Run the Linux/WSL Claude credential gate (per GENESIS §7.1).
-    if matches!(harness, harness::Harness::Claude) {
-        if let Some(err) = harness::linux_wsl_credential_gate(&home_dir) {
-            return Err(err);
+    // 4. Run per-harness adapter-mirrored diagnostics. The shim hand-codes
+    //    these because it must not depend on `maru-adapters` (which pulls
+    //    in serde via maru-core, forbidden by GENESIS §9). The set must
+    //    mirror the real adapter's diagnostics for the same harness:
+    //    - Claude: Linux/WSL credential gate (§7.1).
+    //    - Gemini: keychain isolation warning (§7.3).
+    //    - Codex: no per-activation diagnostics today.
+    let read_var = |k: &str| std::env::var_os(k);
+    match harness {
+        harness::Harness::Claude => {
+            if let Some(err) = harness::linux_wsl_credential_gate(&home_dir, read_var) {
+                return Err(err);
+            }
         }
+        harness::Harness::Gemini => {
+            if let Some((msg, help)) = harness::gemini_keychain_warning(read_var) {
+                eprintln!("maru: warning: {msg}");
+                eprintln!("       {help}");
+            }
+        }
+        harness::Harness::Codex => {}
     }
 
     // 5. Apply env. Single unsafe block; safe under the single-thread invariant.
@@ -152,50 +168,84 @@ fn basename_of(arg0: &OsString) -> Option<OsString> {
 
 // ─── profile resolution chain ────────────────────────────────────────────
 
-fn resolve_profile(maru_home: &Path, home_dir: &Path, cwd: &Path) -> Option<String> {
+/// Outcome of [`walk_for_pin`]. GENESIS §12 mandates that an invalid
+/// `.maru` file is a hard error, not a silent fall-through to
+/// `active.txt`. The caller distinguishes these states.
+enum PinLookup {
+    NotFound,
+    Found(String),
+    Invalid { path: PathBuf, line: String },
+}
+
+fn resolve_profile(
+    maru_home: &Path,
+    home_dir: &Path,
+    cwd: &Path,
+) -> Result<Option<String>, ShimError> {
     // 1. MARU_PROFILE env (non-empty + valid).
     if let Some(raw) = std::env::var_os("MARU_PROFILE") {
         let s = raw.to_string_lossy().trim().to_owned();
         if !s.is_empty() && is_valid_profile_name(&s) {
-            return Some(s);
+            return Ok(Some(s));
         }
     }
 
     // 2. .maru file walked from cwd up to home_dir or filesystem root.
-    if let Some(name) = walk_for_pin(cwd, home_dir) {
-        return Some(name);
+    //    GENESIS §12: invalid name → exit 1 with a clear message; never
+    //    silently fall through.
+    match walk_for_pin(cwd, home_dir) {
+        PinLookup::Found(name) => return Ok(Some(name)),
+        PinLookup::Invalid { path, line } => {
+            return Err(ShimError::user(format!(
+                ".maru at {} contains invalid profile name {line:?}; refusing to silently fall back",
+                path.display()
+            )));
+        }
+        PinLookup::NotFound => {}
     }
 
     // 3. active.txt
     if let Some(name) = config::read_active_txt(maru_home) {
-        return Some(name);
+        return Ok(Some(name));
     }
 
     // 4. [defaults].profile in state.toml
     if let Some(name) = config::read_default_profile(maru_home) {
-        return Some(name);
+        return Ok(Some(name));
     }
 
-    None
+    Ok(None)
 }
 
-fn walk_for_pin(start: &Path, home_dir: &Path) -> Option<String> {
+fn walk_for_pin(start: &Path, home_dir: &Path) -> PinLookup {
     let mut current: Option<&Path> = Some(start);
     while let Some(dir) = current {
         let candidate = dir.join(".maru");
         if let Ok(text) = std::fs::read_to_string(&candidate) {
-            let line = text.lines().next()?.trim();
-            if !line.is_empty() && is_valid_profile_name(line) {
-                return Some(line.to_owned());
+            let raw_line = text.lines().next().unwrap_or("").trim().to_owned();
+            if raw_line.is_empty() {
+                // Empty .maru is not "invalid" — it's an explicit no-pin
+                // signal. Fall through to active.txt / defaults.
+                return PinLookup::NotFound;
             }
-            return None; // .maru exists but invalid: caller's intent is explicit
+            return if is_valid_profile_name(&raw_line) {
+                PinLookup::Found(raw_line)
+            } else {
+                PinLookup::Invalid {
+                    path: candidate,
+                    line: raw_line,
+                }
+            };
         }
         if dir == home_dir {
-            return None;
+            return PinLookup::NotFound;
         }
-        current = dir.parent();
+        current = match dir.parent() {
+            Some(p) => Some(p),
+            None => return PinLookup::NotFound,
+        };
     }
-    None
+    PinLookup::NotFound
 }
 
 /// GENESIS §6 line 168: `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`.
@@ -320,7 +370,7 @@ fn exec_or_spawn(
     reason = "tests"
 )]
 mod tests {
-    use super::{basename_of, is_valid_profile_name, walk_for_pin};
+    use super::{PinLookup, basename_of, is_valid_profile_name, walk_for_pin};
     use std::ffi::OsString;
     use std::path::PathBuf;
 
@@ -362,6 +412,13 @@ mod tests {
         assert!(!is_valid_profile_name(&s));
     }
 
+    fn pin_found(p: PinLookup) -> Option<String> {
+        match p {
+            PinLookup::Found(name) => Some(name),
+            _ => None,
+        }
+    }
+
     #[test]
     fn walk_for_pin_finds_nearest() {
         let dir = tempfile::tempdir().unwrap();
@@ -370,7 +427,7 @@ mod tests {
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(project.join(".maru"), "work\n").unwrap();
         let found = walk_for_pin(&nested, dir.path());
-        assert_eq!(found.as_deref(), Some("work"));
+        assert_eq!(pin_found(found).as_deref(), Some("work"));
     }
 
     #[test]
@@ -379,21 +436,41 @@ mod tests {
         // No .maru anywhere; walking should terminate without panicking.
         let nested = dir.path().join("a").join("b");
         std::fs::create_dir_all(&nested).unwrap();
-        assert!(walk_for_pin(&nested, dir.path()).is_none());
+        assert!(matches!(
+            walk_for_pin(&nested, dir.path()),
+            PinLookup::NotFound
+        ));
     }
 
     #[test]
-    fn walk_for_pin_ignores_invalid_name() {
+    fn walk_for_pin_returns_invalid_for_bad_name() {
+        // GENESIS §12: an invalid name in .maru is a hard error. The
+        // caller (resolve_profile / main) translates this to exit 1.
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("repo");
         std::fs::create_dir_all(&project).unwrap();
-        std::fs::write(project.join(".maru"), "-not-valid\n").unwrap();
-        // Returns None — does NOT silently fall through to active.txt
-        // (per GENESIS §12: "A `.maru` file containing an unknown profile
-        // name causes the shim to exit 1 with a clear message"). Note:
-        // walk_for_pin returns None here; the caller's chain then tries
-        // active.txt. This is consistent with the in-store implementation.
-        assert!(walk_for_pin(&project, dir.path()).is_none());
+        let pin_path = project.join(".maru");
+        std::fs::write(&pin_path, "-not-valid\n").unwrap();
+        match walk_for_pin(&project, dir.path()) {
+            PinLookup::Invalid { path, line } => {
+                assert_eq!(path, pin_path);
+                assert_eq!(line, "-not-valid");
+            }
+            _other => panic!("expected PinLookup::Invalid"),
+        }
+    }
+
+    #[test]
+    fn walk_for_pin_empty_file_treated_as_not_found() {
+        // An empty .maru file is "no pin", not "invalid".
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("repo");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join(".maru"), "").unwrap();
+        assert!(matches!(
+            walk_for_pin(&project, dir.path()),
+            PinLookup::NotFound
+        ));
     }
 
     #[test]
@@ -402,15 +479,38 @@ mod tests {
         // Home == start.
         std::fs::write(dir.path().join(".maru"), "personal\n").unwrap();
         assert_eq!(
-            walk_for_pin(dir.path(), dir.path()).as_deref(),
+            pin_found(walk_for_pin(dir.path(), dir.path())).as_deref(),
             Some("personal")
         );
     }
 
     #[test]
-    fn walk_for_pin_returns_none_when_missing() {
+    fn walk_for_pin_returns_not_found_when_missing() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(walk_for_pin(dir.path(), dir.path()).is_none());
+        assert!(matches!(
+            walk_for_pin(dir.path(), dir.path()),
+            PinLookup::NotFound
+        ));
+    }
+
+    #[test]
+    fn resolve_profile_invalid_pin_yields_user_error() {
+        // GENESIS §12: an invalid name in .maru must surface as exit 1
+        // (ShimError::user), not silently fall through to active.txt.
+        use super::resolve_profile;
+        let home = tempfile::tempdir().unwrap();
+        let project = home.path().join("repo");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join(".maru"), "-not-valid\n").unwrap();
+
+        let err = resolve_profile(home.path(), home.path(), &project).unwrap_err();
+        assert_eq!(err.code, super::EXIT_USER_ERROR);
+        assert!(
+            err.message.contains("invalid profile name"),
+            "msg: {}",
+            err.message
+        );
+        assert!(err.message.contains("-not-valid"), "msg: {}", err.message);
     }
 
     // Convince clippy nothing imported is dead.

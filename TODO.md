@@ -34,3 +34,27 @@ steps in `docs/notes/phase-4-handoff.md`.
 ## Phase 4 exit criterion
 
 - [ ] **4.X** — All §14 Phase 4 exit criteria met. depends-on: 4.1–4.10. Mostly user-blocked on the tap-repo / cert side.
+
+## Spec-compliance hardening (orthogonal to Phase 4)
+
+Landed in `fix: GENESIS spec compliance + safety hardening`:
+
+- [x] §12 `.maru` invalid-name path: shim now exits 1, store returns
+      `Error::InvalidPin`. `PinLookup` 3-state result added to
+      `maru_store::resolve` and the shim's `walk_for_pin`.
+- [x] §8 value-level scrubbing: new `maru_store::scrub` module +
+      `copy_filtered` rewrites `settings.json` / `config.toml` after
+      copy. e2e tests verify clone and export/import paths.
+- [x] §9 step 4: shim hand-coded plan path now mirrors the Gemini
+      keychain warning (was Claude-only). GENESIS §9 algorithm note
+      acknowledges this parity requirement.
+- [x] §6 `plan()` signature: added documented `env: &dyn Environment`
+      parameter to GENESIS source listing.
+- [x] CLI `run`: replaced `home_dir().unwrap_or_default()` with a
+      typed env-error so the Linux Claude gate cannot silently misfire.
+- [x] `maru-activation::apply_env` safety doc: rewritten to name both
+      production callers (shim main + CLI run) and their distinct
+      single-thread invariants.
+- [x] Shim Linux gate test: removed `unsafe std::env::remove_var`;
+      gate now takes a `vars: F` callback so tests inject env without
+      touching real process env.

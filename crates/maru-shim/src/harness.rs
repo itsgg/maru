@@ -45,8 +45,7 @@ impl Harness {
     ///
     /// GENESIS §7.1 (Claude): `CLAUDE_CONFIG_DIR` AND
     /// `CLAUDE_CODE_PLUGIN_CACHE_DIR` (both unconditional, both absolute).
-    /// §7.2 (Codex): `CODEX_HOME`. §7.3 (Gemini): `GEMINI_CLI_HOME`
-    /// (Phase 2).
+    /// §7.2 (Codex): `CODEX_HOME`. §7.3 (Gemini): `GEMINI_CLI_HOME`.
     pub fn env_for_profile(self, profile_root: &Path) -> Vec<(&'static str, OsString)> {
         match self {
             Self::Claude => vec![
@@ -74,8 +73,16 @@ impl Harness {
 /// exists AND `DBUS_SESSION_BUS_ADDRESS` is unset (a proxy for "no
 /// keyring available"). Returns `Some(ShimError)` to abort the launch.
 ///
+/// `vars` is a callback that returns environment-variable values. The
+/// production caller passes a closure over [`std::env::var_os`]; tests
+/// pass an in-memory map so they don't have to mutate the real process
+/// env (which is racy when tests run in parallel).
+///
 /// On non-Linux platforms always returns `None` (the gate doesn't apply).
-pub fn linux_wsl_credential_gate(home_dir: &Path) -> Option<ShimError> {
+pub fn linux_wsl_credential_gate<F>(home_dir: &Path, vars: F) -> Option<ShimError>
+where
+    F: Fn(&str) -> Option<OsString>,
+{
     if !is_linux_or_wsl() {
         return None;
     }
@@ -83,7 +90,7 @@ pub fn linux_wsl_credential_gate(home_dir: &Path) -> Option<ShimError> {
     if !creds.exists() {
         return None;
     }
-    if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some() {
+    if vars("DBUS_SESSION_BUS_ADDRESS").is_some() {
         return None;
     }
     Some(ShimError::gate(
@@ -97,6 +104,41 @@ pub fn linux_wsl_credential_gate(home_dir: &Path) -> Option<ShimError> {
             creds.display()
         ),
     ))
+}
+
+/// Gemini keychain-isolation warning (GENESIS §7.3).
+///
+/// When the user has set `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE` to a
+/// truthy value, Gemini stores OAuth tokens in a single shared keychain
+/// service name (`gemini-cli-oauth`), at which point per-profile
+/// isolation breaks. The shim emits this as a warning to stderr; it is
+/// **not** a fatal gate (the user may know what they're doing).
+///
+/// Returns `Some((message, help))` if the warning should fire,
+/// `None` otherwise. `vars` is a callback returning env-var values, as
+/// in [`linux_wsl_credential_gate`].
+pub fn gemini_keychain_warning<F>(vars: F) -> Option<(String, String)>
+where
+    F: Fn(&str) -> Option<OsString>,
+{
+    let raw = vars("GEMINI_FORCE_ENCRYPTED_FILE_STORAGE")?;
+    if !is_truthy(&raw) {
+        return None;
+    }
+    Some((
+        "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE is set; Gemini OAuth tokens go to a single shared keychain entry (`gemini-cli-oauth`), breaking per-profile isolation."
+            .to_owned(),
+        "Unset the variable to restore profile isolation:\n         unset GEMINI_FORCE_ENCRYPTED_FILE_STORAGE"
+            .to_owned(),
+    ))
+}
+
+fn is_truthy(v: &OsString) -> bool {
+    let s = v.to_string_lossy();
+    matches!(
+        s.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -119,7 +161,7 @@ const fn is_linux_or_wsl() -> bool {
 )]
 mod tests {
     use super::Harness;
-    use std::ffi::OsStr;
+    use std::ffi::{OsStr, OsString};
     use std::path::PathBuf;
 
     #[test]
@@ -200,17 +242,38 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn linux_gate_trips_when_creds_exist_no_dbus() {
+        // No `unsafe`, no real-process-env mutation: the gate takes a
+        // closure that returns env var values. Tests pass an empty
+        // closure so DBUS_SESSION_BUS_ADDRESS reads as None.
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
         std::fs::write(dir.path().join(".claude").join(".credentials.json"), b"{}").unwrap();
-        // Manually clear DBUS_SESSION_BUS_ADDRESS.
-        // SAFETY: tests serialize on this var via #[serial] when needed;
-        // here we accept the race in single-threaded test exec.
-        #[allow(unsafe_code, reason = "test setup")]
-        unsafe {
-            std::env::remove_var("DBUS_SESSION_BUS_ADDRESS");
-        }
-        assert!(super::linux_wsl_credential_gate(dir.path()).is_some());
+        let no_vars = |_: &str| -> Option<OsString> { None };
+        assert!(super::linux_wsl_credential_gate(dir.path(), no_vars).is_some());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_gate_clear_when_dbus_present() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
+        std::fs::write(dir.path().join(".claude").join(".credentials.json"), b"{}").unwrap();
+        let with_dbus = |k: &str| -> Option<OsString> {
+            if k == "DBUS_SESSION_BUS_ADDRESS" {
+                Some(OsString::from("unix:abstract=/tmp/dbus"))
+            } else {
+                None
+            }
+        };
+        assert!(super::linux_wsl_credential_gate(dir.path(), with_dbus).is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_gate_clear_when_creds_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let no_vars = |_: &str| -> Option<OsString> { None };
+        assert!(super::linux_wsl_credential_gate(dir.path(), no_vars).is_none());
     }
 
     #[test]
@@ -219,6 +282,63 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
         std::fs::write(dir.path().join(".claude").join(".credentials.json"), b"{}").unwrap();
-        assert!(super::linux_wsl_credential_gate(dir.path()).is_none());
+        let no_vars = |_: &str| -> Option<OsString> { None };
+        assert!(super::linux_wsl_credential_gate(dir.path(), no_vars).is_none());
+    }
+
+    #[test]
+    fn gemini_keychain_warning_fires_when_truthy() {
+        let on = |k: &str| -> Option<OsString> {
+            if k == "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE" {
+                Some(OsString::from("true"))
+            } else {
+                None
+            }
+        };
+        let warn = super::gemini_keychain_warning(on).expect("warning should fire on `true`");
+        assert!(warn.0.contains("GEMINI_FORCE_ENCRYPTED_FILE_STORAGE"));
+        assert!(warn.0.contains("gemini-cli-oauth"));
+        assert!(warn.1.contains("Unset"));
+    }
+
+    #[test]
+    fn gemini_keychain_warning_silent_when_unset_or_falsy() {
+        let none = |_: &str| -> Option<OsString> { None };
+        assert!(super::gemini_keychain_warning(none).is_none());
+
+        let off = |k: &str| -> Option<OsString> {
+            if k == "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE" {
+                Some(OsString::from("false"))
+            } else {
+                None
+            }
+        };
+        assert!(super::gemini_keychain_warning(off).is_none());
+
+        let zero = |k: &str| -> Option<OsString> {
+            if k == "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE" {
+                Some(OsString::from("0"))
+            } else {
+                None
+            }
+        };
+        assert!(super::gemini_keychain_warning(zero).is_none());
+    }
+
+    #[test]
+    fn gemini_keychain_warning_truthy_variants() {
+        for v in ["1", "true", "TRUE", "yes", "on"] {
+            let f = move |k: &str| -> Option<OsString> {
+                if k == "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE" {
+                    Some(OsString::from(v))
+                } else {
+                    None
+                }
+            };
+            assert!(
+                super::gemini_keychain_warning(f).is_some(),
+                "{v:?} should be truthy"
+            );
+        }
     }
 }

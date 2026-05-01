@@ -801,57 +801,62 @@ fn read_token_from_stdin() -> Result<String> {
         .to_owned())
 }
 
-/// Run `claude setup-token` interactively (stdin/stderr inherited so the
-/// user can complete OAuth), capturing stdout. The last non-empty line of
-/// stdout is the OAuth token. We tee stdout to the user's terminal so
-/// they see the same output they'd see running the command directly.
+/// Run `claude setup-token` with full stdio inheritance, then prompt
+/// the user to paste the token printed at the end.
+///
+/// Earlier versions of this function piped stdout to capture the token
+/// automatically, which broke Claude Code's TUI rendering (it detects
+/// the pipe and re-renders the splash repeatedly) and reliably grabbed
+/// the wrong line — usually the hint `Use this token by setting:
+/// export CLAUDE_CODE_OAUTH_TOKEN=<token>` rather than the actual
+/// token a few lines below.
+///
+/// The simplest correct UX: let `setup-token` run with a real TTY so
+/// its OAuth flow + token display work normally, then ask the user to
+/// paste the printed token. They can scroll back if they need to.
 fn run_claude_setup_token_and_capture(profile: &ProfileName) -> Result<String> {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::Write;
     use std::process::{Command, Stdio};
 
     eprintln!(
-        "maru: launching `claude setup-token` to authenticate profile {:?}.",
+        "maru: launching `claude setup-token` for profile {:?}.",
         profile.as_str()
     );
     eprintln!(
-        "maru: complete the OAuth flow in your browser; the token printed at \
-         the end will be captured automatically. (Re-run with --stdin if \
-         you've already generated a token.)"
+        "maru: complete the OAuth flow in your browser; `setup-token` will \
+         print the token at the end. Copy it, then paste here when prompted."
     );
+    eprintln!();
 
-    let mut child = Command::new("claude")
+    let status = Command::new("claude")
         .arg("setup-token")
         .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .stdout(Stdio::piped())
-        .spawn()
+        .status()
         .context("spawn `claude setup-token` (is `claude` on PATH? install Claude Code first)")?;
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("child stdout pipe missing"))?;
-
-    let mut last_line = String::new();
-    let reader = BufReader::new(stdout);
-    let mut user_stdout = std::io::stdout();
-    for line in reader.lines() {
-        let line = line.context("read claude setup-token stdout")?;
-        let _ = writeln!(user_stdout, "{line}");
-        let _ = user_stdout.flush();
-        let trimmed = line.trim();
-        if !trimmed.is_empty() {
-            trimmed.clone_into(&mut last_line);
-        }
-    }
-
-    let status = child.wait().context("wait for claude setup-token")?;
     if !status.success() {
         bail!(CliError::user(format!(
             "`claude setup-token` exited with status {status}"
         )));
     }
-    Ok(last_line)
+
+    eprintln!();
+    eprint!("maru: paste the OAuth token printed above and press Enter: ");
+    std::io::stderr().flush().ok();
+
+    let mut buf = String::new();
+    std::io::stdin()
+        .read_line(&mut buf)
+        .context("read pasted token from stdin")?;
+    let token = buf.trim().to_owned();
+    if token.is_empty() {
+        bail!(CliError::user(
+            "no token entered — aborting (re-run with --stdin to pipe a token directly)"
+        ));
+    }
+    Ok(token)
 }
 
 /// Write `token` to `path` with mode 0600 on Unix.

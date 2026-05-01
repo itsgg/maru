@@ -12,12 +12,12 @@ members  = [
 ]
 
 [workspace.package]
-version       = "0.1.0-alpha.1"
+version       = "0.1.0-alpha.2"
 edition       = "2024"
 rust-version  = "1.85"
 license       = "Apache-2.0 OR MIT"
-repository    = "https://github.com/gg/maru"
-homepage      = "https://github.com/gg/maru"
+repository    = "https://github.com/itsgg/maru"
+homepage      = "https://github.com/itsgg/maru"
 authors       = ["maru contributors"]
 
 # Workspace-wide lint config. Member crates inherit via `[lints] workspace = true`.

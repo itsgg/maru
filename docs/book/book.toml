@@ -1,0 +1,17 @@
+[book]
+title = "maru — unified profile manager for AI coding agents"
+authors = ["maru contributors"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/itsgg/maru"
+edit-url-template = "https://github.com/itsgg/maru/edit/main/docs/book/{path}"
+fold = { enable = true, level = 1 }
+
+[output.html.search]
+enable = true
+limit-results = 30

@@ -21,23 +21,18 @@ Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag
 
 ## Install
 
-`maru` ships as two binaries (`maru` + `maru-shim`); both must be on PATH before you run `maru install`.
-
 ```sh
 # macOS / Linux (Homebrew)
-brew install itsgg/maru/maru-cli itsgg/maru/maru-shim
-maru install
+brew install itsgg/maru/maru && maru install
 
 # macOS / Linux (curl)
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.sh | sh
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.sh | sh
-maru install
+curl -sSL https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
-iwr https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.ps1 | iex
-iwr https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.ps1 | iex
-maru install
+iwr https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.ps1 | iex
 ```
+
+Each command installs both binaries (`maru` + `maru-shim`) and wires the per-harness shims (claude/codex/gemini) into your PATH.
 
 Scoop and winget channels are reserved (`itsgg/scoop-maru`, `itsgg.maru`) but not yet wired up — see [`docs/notes/phase-4-handoff.md`](docs/notes/phase-4-handoff.md). Use the PowerShell installer on Windows for now.
 

@@ -1,8 +1,6 @@
 # Install
 
-`maru` ships as two binaries — `maru` (the CLI) and `maru-shim` (the hot path that intercepts `claude` / `codex` / `gemini` invocations). Both must be on PATH before you run `maru install`.
-
-The installation steps below put both binaries in the same directory; `maru install` then writes per-harness symlinks that dispatch through `maru-shim`.
+`maru` ships as two binaries — `maru` (the CLI) and `maru-shim` (the hot path that intercepts `claude` / `codex` / `gemini` invocations). The installers below place both side-by-side and run `maru install` to wire the per-harness shims into `$MARU_HOME/bin`.
 
 ## Prerequisites
 
@@ -12,31 +10,37 @@ The installation steps below put both binaries in the same directory; `maru inst
 ## Homebrew (macOS, Linux)
 
 ```sh
-brew install itsgg/maru/maru-cli itsgg/maru/maru-shim
+brew install itsgg/maru/maru
 maru install
 ```
 
-Pulls from the [`itsgg/homebrew-maru`](https://github.com/itsgg/homebrew-maru) tap. The two formulas are updated automatically on each release.
+A single `maru` formula in the [`itsgg/homebrew-maru`](https://github.com/itsgg/homebrew-maru) tap installs both binaries (the shim arrives via a Homebrew `resource`). `maru install` is a separate step because Homebrew formulas don't write to user directories or shell rc — see [What `maru install` does](#what-maru-install-does) below.
 
-## curl one-liners (macOS, Linux)
+## curl one-liner (macOS, Linux)
 
 ```sh
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.sh | sh
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.sh | sh
-maru install
+curl -sSL https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.sh | sh
 ```
 
-Each installer detects your platform, downloads the matching tarball from the latest GitHub Release, and unpacks the binary into `$CARGO_HOME/bin` (defaults to `~/.cargo/bin`).
+A thin wrapper at [`scripts/install.sh`](https://github.com/itsgg/maru/blob/main/scripts/install.sh) runs both per-binary installers (`maru-cli-installer.sh`, `maru-shim-installer.sh`) that `dist` produces on each release, drops both binaries into `$CARGO_HOME/bin` (defaults to `~/.cargo/bin`), and runs `maru install`. Pass `--no-shell-rc` to skip the shell rc edit:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.sh | sh -s -- --no-shell-rc
+```
+
+If you'd rather invoke the per-binary installers directly (e.g. you don't trust a third-party wrapper script), see the [Manual install](#manual-install) section below.
 
 ## PowerShell (Windows)
 
 ```powershell
-iwr https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.ps1 | iex
-iwr https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.ps1 | iex
-maru install
+iwr https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.ps1 | iex
 ```
 
-Same idea as the curl installers, but for Windows. Drops both binaries into `%CARGO_HOME%\bin`.
+The Windows equivalent of the curl wrapper. Drops both binaries into `%CARGO_HOME%\bin` and runs `maru install`. To skip the shell rc edit (PowerShell rc editing is not yet implemented anyway), invoke with `-NoShellRc`:
+
+```powershell
+& ([scriptblock]::Create((iwr https://raw.githubusercontent.com/itsgg/maru/main/scripts/install.ps1).Content)) -NoShellRc
+```
 
 ## Scoop (Windows) — not yet available
 
@@ -49,6 +53,26 @@ Use the PowerShell installer above for now.
 dist 0.31.0 doesn't auto-submit to `microsoft/winget-pkgs`; submission requires a manual `wingetcreate` step per release. Track at [docs/notes/phase-4-handoff.md](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md).
 
 Use the PowerShell installer above for now.
+
+## Manual install (skip the wrapper)
+
+If you'd rather not run a third-party wrapper script, invoke the per-binary installers `dist` ships with each release directly:
+
+```sh
+# macOS / Linux
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.sh | sh
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.sh | sh
+maru install
+```
+
+```powershell
+# Windows
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.ps1 | iex
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.ps1 | iex
+maru install
+```
+
+These are the installers `dist` generates; the curl/PowerShell wrappers above just call both in sequence.
 
 ## Build from source
 

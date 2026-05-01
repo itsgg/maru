@@ -1,13 +1,52 @@
 # Install
 
-Pre-1.0 — installation is from source. Distribution channels (Homebrew tap, Scoop bucket, winget, `curl | sh`) land in Phase 4 per [GENESIS §14](../GENESIS.md).
+Pick the channel that matches your platform. After installing the binary by **any** method, run `maru install` once to wire the shim symlinks into your PATH (see [Install shims onto PATH](#install-shims-onto-path) below).
 
 ## Prerequisites
 
-- Rust 1.95.0 (the toolchain pinned in `rust-toolchain.toml`).
 - One or more of the supported harness CLIs already on PATH: [`claude`](https://docs.claude.com/en/docs/claude-code), [`codex`](https://developers.openai.com/codex), [`gemini`](https://github.com/google-gemini/gemini-cli).
+- Building from source additionally requires Rust 1.95.0 (the toolchain pinned in `rust-toolchain.toml`).
 
-> The toolchain pin in `rust-toolchain.toml` is the build toolchain; the workspace MSRV (`Cargo.toml [workspace.package].rust-version`) is `1.85` for end-user `cargo install`.
+## Homebrew (macOS, Linux)
+
+```sh
+brew install itsgg/maru/maru
+```
+
+Pulls from the [`itsgg/homebrew-maru`](https://github.com/itsgg/homebrew-maru) tap. The formula is updated automatically on each release.
+
+## curl one-liner (macOS, Linux)
+
+```sh
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.sh | sh
+```
+
+Detects your platform, downloads the matching tarball from the latest GitHub Release, verifies its checksum, and unpacks `maru` + `maru-shim` into `~/.local/bin` (or the closest equivalent).
+
+## PowerShell (Windows)
+
+```powershell
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-installer.ps1 | iex
+```
+
+Same idea as the curl installer, but for Windows. Drops the binaries into `%LOCALAPPDATA%\maru\bin`.
+
+## Scoop (Windows)
+
+```powershell
+scoop bucket add maru https://github.com/itsgg/scoop-maru
+scoop install maru
+```
+
+The Scoop bucket is maintained per-release: the manifest is updated when a new tag ships. If `scoop install` reports a stale version, run `scoop update` first.
+
+## winget (Windows)
+
+```powershell
+winget install itsgg.maru
+```
+
+The winget manifest is submitted to `microsoft/winget-pkgs` after each release; expect a small lag between a fresh tag and the manifest going live.
 
 ## Build from source
 
@@ -21,6 +60,8 @@ Two binaries land under `target/release/`:
 
 - **`maru`** — the manager binary you'll invoke directly (`maru profile create ...`, `maru doctor`, etc.).
 - **`maru-shim`** — the hot-path shim. Symlinks named `claude`/`codex`/`gemini` dispatch through this binary by reading `argv[0]`.
+
+> The toolchain pin in `rust-toolchain.toml` is the build toolchain; the workspace MSRV (`Cargo.toml [workspace.package].rust-version`) is `1.85` for end-user `cargo install`.
 
 ## Install shims onto PATH
 

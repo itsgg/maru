@@ -35,10 +35,15 @@ fn matches_universal(path: &Path) -> bool {
 }
 
 /// File names to drop, per harness. From GENESIS §8 deny-list.
+///
+/// `oauth_token` (Claude): per-profile `CLAUDE_CODE_OAUTH_TOKEN` source
+/// populated by `maru profile login` / `claude setup-token`. Bypasses
+/// the macOS Keychain shared-storage problem; must never leak via
+/// clone / export / import.
 #[must_use]
 pub const fn excluded_file_names(harness: HarnessId) -> &'static [&'static str] {
     match harness {
-        HarnessId::Claude => &[".credentials.json", "credentials.json"],
+        HarnessId::Claude => &[".credentials.json", "credentials.json", "oauth_token"],
         HarnessId::Codex => &[
             "auth.json",
             "mcp-oauth-tokens.json",
@@ -74,6 +79,15 @@ mod tests {
         assert!(is_excluded(
             HarnessId::Claude,
             Path::new("subdir/.credentials.json")
+        ));
+    }
+
+    #[test]
+    fn claude_oauth_token_excluded() {
+        assert!(is_excluded(HarnessId::Claude, Path::new("oauth_token")));
+        assert!(is_excluded(
+            HarnessId::Claude,
+            Path::new("claude/oauth_token")
         ));
     }
 

@@ -19,27 +19,36 @@ maru profile create work --harness claude,codex
 
 This creates `$MARU_HOME/profiles/work/{claude,codex}/` and registers the profile in `state.toml`. No credentials are copied — these are fresh empty config dirs.
 
-## 2. Activate it
+## 2. Authenticate Claude (per-profile)
+
+```sh
+maru profile login work             # wraps `claude setup-token`; saves to <profile>/claude/oauth_token
+```
+
+This is the maru-recommended way to give a profile its own Claude credentials. The adapter exports the saved token via `CLAUDE_CODE_OAUTH_TOKEN` at activation, which bypasses Claude's shared-Keychain problem and gives each profile real OAuth isolation. See [`adapters/claude.md`](adapters/claude.md#per-profile-oauth-token-keychain-bypass) for details. Codex authenticates on first launch (step 3); Gemini too.
+
+## 3. Activate it
 
 ```sh
 maru profile use work
-claude        # first launch will prompt for OAuth — that creds the `work` profile
-codex
+claude        # uses the work-profile OAuth token from step 2
+codex         # first launch prompts for OAuth; tokens land under <profile>/codex/
 ```
 
 Whatever you log into now lives under `$MARU_HOME/profiles/work/`. The shim sets `CLAUDE_CONFIG_DIR` and `CODEX_HOME` before exec'ing the real binary.
 
-## 3. Add a second profile
+## 4. Add a second profile
 
 ```sh
 maru profile create personal --harness claude,codex
+maru profile login personal             # log in with a different Claude account
 maru profile use personal
-claude        # fresh OAuth flow — different account
+claude                                  # uses the personal-profile token
 ```
 
-You now have two fully isolated profiles: separate credentials, history, MCP servers, plugins, settings. Switch with `maru profile use <name>`.
+You now have two fully isolated profiles. Switch with `maru profile use <name>`. Claude credentials are isolated per-profile via per-token-file env vars; logging out from one profile no longer affects the other.
 
-## 4. Verify
+## 5. Verify
 
 ```sh
 maru profile list
@@ -49,7 +58,7 @@ maru profile current
 MARU_PROFILE=work claude
 ```
 
-## 5. Inspect what would happen
+## 6. Inspect what would happen
 
 ```sh
 maru run --profile work --dry-run -- claude

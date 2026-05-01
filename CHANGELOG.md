@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Documentation
+### Added
 
-- Documented the **macOS Claude Keychain isolation gap** in `docs/limitations.md` and `docs/adapters/claude.md`: Claude Code on macOS stores OAuth credentials in the system Keychain under a single shared service name (`Claude Safe Storage` / `Claude Key`), unkeyed by `CLAUDE_CONFIG_DIR`. Credentials are NOT isolated per maru profile on macOS by default; file state (sessions, projects, MCP, settings, plugins) is. Logging out under one profile clears the shared Keychain entry, so other profiles appear logged out too. Same shape as the existing Codex-keyring / Gemini-encrypted-storage carve-outs, but Claude does it by default with no opt-out env var.
+- **Per-profile Claude OAuth isolation via `CLAUDE_CODE_OAUTH_TOKEN`.** Claude Code's Keychain entry is not reliably partitioned per `CLAUDE_CONFIG_DIR` across 2.1.x — logging out under one profile clears credentials shared with another. Fix: store a per-profile OAuth token at `<profile>/claude/oauth_token` (mode 0600); the Claude adapter exports it as `CLAUDE_CODE_OAUTH_TOKEN` at activation. Per Claude Code's auth precedence (step 5), env-var tokens win over Keychain — Claude Code never consults the shared entry when the file is present, giving each profile real credential isolation.
+- **`maru profile login <name>`** — wraps `claude setup-token`, captures the OAuth token from stdout, writes it to `<profile>/claude/oauth_token`. Use `--stdin` to pipe a pre-generated token (`claude setup-token | maru profile login work --stdin`).
+- `oauth_token` added to the GENESIS §8 credential deny-list — never copied by `maru profile clone` / `export` / `import`.
 
 ## [0.1.0-alpha.4] - 2026-05-01
 

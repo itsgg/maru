@@ -2,7 +2,7 @@
 //! harness binary.
 #![allow(
     unsafe_code,
-    reason = "std::env::set_var is unsafe (Rust 1.79+); the shim is single-threaded by construction (GENESIS §11)"
+    reason = "std::env::set_var is unsafe (Rust 1.79+); the two callers (shim main + CLI run) are both single-threaded at the point of call — see apply_env safety docs"
 )]
 #![allow(
     clippy::print_stderr,
@@ -103,15 +103,38 @@ pub fn process_diagnostics(diagnostics: &[Diagnostic]) -> Result<(), Error> {
 /// `std::env::set_var` is `unsafe` as of Rust 1.79 because environment
 /// mutation is not thread-safe. This function takes a single `unsafe`
 /// block over the entire loop. **Callers must ensure no other threads
-/// are reading or writing process env concurrently.** The shim is
-/// single-threaded by construction (no `tokio`, no `rayon`, no manually
-/// spawned threads — see GENESIS §13 forbidden list); env application
-/// happens before any potential threading source could be introduced.
+/// are reading or writing process env concurrently.**
 ///
-/// In test contexts (where the test harness may spawn threads), use
-/// [`compute_env`] to obtain the bindings without mutating process env.
+/// `apply_env` has two production callers, each with its own invariant:
+///
+/// 1. **`maru-shim`'s `main()`**: the shim is single-threaded by
+///    construction. GENESIS §13 forbids `tokio` and `async-std`, and
+///    the shim crate uses neither `rayon` nor any manually spawned
+///    thread. The shim has no `tracing-subscriber` either (its
+///    dependency budget in GENESIS §9 forbids `tracing`). `apply_env`
+///    is called before `exec`/`CreateProcess`, so no concurrent reader
+///    exists.
+///
+/// 2. **`maru-cli`'s `run` subcommand**: the CLI calls
+///    `init_tracing()` in `main()` before reaching `cmd::run::run`,
+///    but it uses the synchronous fmt subscriber
+///    (`tracing_subscriber::fmt()`), which formats and writes on the
+///    calling thread and spawns no background threads. `apply_env` is
+///    therefore reached before any thread is created.
+///
+/// **Adding a non-blocking subscriber, a worker pool, or any
+/// thread-spawning runtime to either crate breaks this contract.** If
+/// you add one, env application must be moved to a different model
+/// (e.g., spawn the child with the explicit env rather than mutating
+/// the parent's process env).
+///
+/// In test contexts (where the test harness may spawn threads
+/// implicitly), use [`compute_env`] to obtain the bindings without
+/// mutating process env.
 pub fn apply_env(plan: &ActivationPlan) {
-    // SAFETY: Single-threaded by construction. See GENESIS §11 / §13.
+    // SAFETY: see the two-caller invariant in the function-level
+    // doc-comment above. Both production callers reach this point
+    // before any thread is spawned.
     unsafe {
         for (k, v) in &plan.env {
             std::env::set_var(k, v);

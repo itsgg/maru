@@ -67,7 +67,13 @@ pub fn run(ctx: &CliContext, args: RunArgs) -> Result<()> {
 
     let profile_root = ctx.profile_root(name.as_str());
     let env = maru_core::SystemEnvironment::new();
-    let home = env.home_dir().unwrap_or_default();
+    // GENESIS §7.1 Linux Claude gate checks `home_dir.join(...)`; if we
+    // silently default to `PathBuf::new()` here, the gate would test the
+    // current working directory instead of $HOME, which is a silent
+    // misfire. Fail loudly instead.
+    let home = env
+        .home_dir()
+        .ok_or_else(|| CliError::env("could not resolve home directory"))?;
     let profile_ctx = ProfileContext {
         profile_name: &name,
         profile_root: &profile_root,

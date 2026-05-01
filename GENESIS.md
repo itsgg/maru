@@ -200,7 +200,17 @@ pub trait HarnessAdapter: Send + Sync {
     fn detect(&self, env: &dyn Environment) -> Detection;
 
     /// Pure: compute the activation plan for the given context.
-    fn plan(&self, ctx: &ProfileContext<'_>) -> Result<ActivationPlan, AdapterError>;
+    /// `env` is read-only (no mutation, no I/O); adapters that need to
+    /// inspect environment variables for activation-time gates (e.g.
+    /// the Linux Claude credential gate's `DBUS_SESSION_BUS_ADDRESS`
+    /// check, or the Gemini `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE`
+    /// warning) read them through this trait object so unit tests can
+    /// inject a `FakeEnvironment`.
+    fn plan(
+        &self,
+        ctx: &ProfileContext<'_>,
+        env: &dyn Environment,
+    ) -> Result<ActivationPlan, AdapterError>;
 
     /// Read-only sanity check on a profile dir for `maru doctor`.
     fn validate(&self, profile_dir: &Path) -> ValidationReport;
@@ -394,6 +404,14 @@ The shim is the **only** component on the user's hot path. Every `claude`, `code
        .ok_or(fail_with_install_hint)
 4. let plan = adapter(harness).plan(&ctx)
        // Err(_) is a hard adapter failure → exit 64+ (per §8 codes)
+       // NOTE: the shim cannot link `maru-adapters` because that crate
+       // transitively depends on `serde` via `maru-core` (forbidden in
+       // the shim per §13). The shim therefore hand-codes the env
+       // emission and the per-harness adapter-mirrored diagnostics
+       // — Claude's Linux/WSL credential gate (§7.1) and Gemini's
+       // keychain warning (§7.3). Any new diagnostic added to a real
+       // adapter that needs to fire on the shim's hot path must be
+       // mirrored in `maru-shim::harness` to preserve parity.
 5. for diag in &plan.diagnostics:
        if diag.level == Error: print and exit 3
        if diag.level == Warn:  print to stderr (one-line, no stack)

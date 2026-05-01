@@ -397,7 +397,12 @@ fn clone_excludes_credentials() {
 
     let claude_dir = home.path().join("profiles/src/claude");
     std::fs::write(claude_dir.join(".credentials.json"), "SECRET").unwrap();
-    std::fs::write(claude_dir.join("settings.json"), "{}").unwrap();
+    // Seed scrubbable fields per GENESIS §8 value-level scrubbing.
+    std::fs::write(
+        claude_dir.join("settings.json"),
+        r#"{"anthropic_api_key":"sk-CLONESECRET","ui":{"theme":"dark"}}"#,
+    )
+    .unwrap();
 
     maru_cmd()
         .args([
@@ -416,6 +421,21 @@ fn clone_excludes_credentials() {
     assert!(
         !dst_claude.join(".credentials.json").exists(),
         ".credentials.json must NOT be present in cloned profile"
+    );
+    // Value-level scrubbing: settings.json is included, but the API key
+    // value is replaced; benign keys preserved.
+    let dst_settings = std::fs::read_to_string(dst_claude.join("settings.json")).unwrap();
+    assert!(
+        !dst_settings.contains("sk-CLONESECRET"),
+        "scrubbed value leaked into clone target: {dst_settings}"
+    );
+    assert!(
+        dst_settings.contains("<scrubbed by maru>"),
+        "expected scrub placeholder in cloned settings.json: {dst_settings}"
+    );
+    assert!(
+        dst_settings.contains("dark"),
+        "benign value lost in clone: {dst_settings}"
     );
 }
 
@@ -437,7 +457,13 @@ fn export_tarball_omits_credentials() {
 
     let claude_dir = home.path().join("profiles/src/claude");
     std::fs::write(claude_dir.join(".credentials.json"), "SECRET").unwrap();
-    std::fs::write(claude_dir.join("settings.json"), "{\"theme\":\"dark\"}").unwrap();
+    // Seed both file-level and value-level secrets to exercise both
+    // GENESIS §8 layers in one e2e.
+    std::fs::write(
+        claude_dir.join("settings.json"),
+        r#"{"theme":"dark","anthropic_api_key":"sk-EXPORTSECRET"}"#,
+    )
+    .unwrap();
 
     let archive = home.path().join("src.tar.gz");
     maru_cmd()
@@ -480,6 +506,19 @@ fn export_tarball_omits_credentials() {
     let imported = home.path().join("profiles/imported/claude");
     assert!(imported.join("settings.json").exists());
     assert!(!imported.join(".credentials.json").exists());
+    let imported_settings = std::fs::read_to_string(imported.join("settings.json")).unwrap();
+    assert!(
+        !imported_settings.contains("sk-EXPORTSECRET"),
+        "value-level scrub failed; raw secret leaked through export/import: {imported_settings}"
+    );
+    assert!(
+        imported_settings.contains("<scrubbed by maru>"),
+        "expected scrub placeholder in imported settings.json: {imported_settings}"
+    );
+    assert!(
+        imported_settings.contains("dark"),
+        "benign theme lost through export/import: {imported_settings}"
+    );
 }
 
 #[test]

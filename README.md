@@ -21,25 +21,27 @@ Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag
 
 ## Install
 
+`maru` ships as two binaries (`maru` + `maru-shim`); both must be on PATH before you run `maru install`.
+
 ```sh
 # macOS / Linux (Homebrew)
-brew install itsgg/maru/maru
+brew install itsgg/maru/maru-cli itsgg/maru/maru-shim
+maru install
 
 # macOS / Linux (curl)
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.sh | sh
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.sh | sh
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.sh | sh
+maru install
 
 # Windows (PowerShell)
-iwr https://github.com/itsgg/maru/releases/latest/download/maru-installer.ps1 | iex
-
-# Windows (Scoop)
-scoop bucket add maru https://github.com/itsgg/scoop-maru
-scoop install maru
-
-# Windows (winget)
-winget install itsgg.maru
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.ps1 | iex
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.ps1 | iex
+maru install
 ```
 
-After install, run `maru install` once to wire the shim symlinks into your shell's PATH. Full instructions and a from-source path are in [`docs/book/src/install.md`](docs/book/src/install.md).
+Scoop and winget channels are reserved (`itsgg/scoop-maru`, `itsgg.maru`) but not yet wired up — see [`docs/notes/phase-4-handoff.md`](docs/notes/phase-4-handoff.md). Use the PowerShell installer on Windows for now.
+
+Full instructions and a from-source path are in [`docs/install.md`](docs/install.md).
 
 ## Project structure
 

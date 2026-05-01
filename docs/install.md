@@ -1,6 +1,8 @@
 # Install
 
-Pick the channel that matches your platform. After installing the binary by **any** method, run `maru install` once to wire the shim symlinks into your PATH (see [Install shims onto PATH](#install-shims-onto-path) below).
+`maru` ships as two binaries — `maru` (the CLI) and `maru-shim` (the hot path that intercepts `claude` / `codex` / `gemini` invocations). Both must be on PATH before you run `maru install`.
+
+The installation steps below put both binaries in the same directory; `maru install` then writes per-harness symlinks that dispatch through `maru-shim`.
 
 ## Prerequisites
 
@@ -10,43 +12,43 @@ Pick the channel that matches your platform. After installing the binary by **an
 ## Homebrew (macOS, Linux)
 
 ```sh
-brew install itsgg/maru/maru
+brew install itsgg/maru/maru-cli itsgg/maru/maru-shim
+maru install
 ```
 
-Pulls from the [`itsgg/homebrew-maru`](https://github.com/itsgg/homebrew-maru) tap. The formula is updated automatically on each release.
+Pulls from the [`itsgg/homebrew-maru`](https://github.com/itsgg/homebrew-maru) tap. The two formulas are updated automatically on each release.
 
-## curl one-liner (macOS, Linux)
+## curl one-liners (macOS, Linux)
 
 ```sh
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.sh | sh
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.sh | sh
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.sh | sh
+maru install
 ```
 
-Detects your platform, downloads the matching tarball from the latest GitHub Release, verifies its checksum, and unpacks `maru` + `maru-shim` into `~/.local/bin` (or the closest equivalent).
+Each installer detects your platform, downloads the matching tarball from the latest GitHub Release, and unpacks the binary into `$CARGO_HOME/bin` (defaults to `~/.cargo/bin`).
 
 ## PowerShell (Windows)
 
 ```powershell
-iwr https://github.com/itsgg/maru/releases/latest/download/maru-installer.ps1 | iex
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-cli-installer.ps1 | iex
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-shim-installer.ps1 | iex
+maru install
 ```
 
-Same idea as the curl installer, but for Windows. Drops the binaries into `%LOCALAPPDATA%\maru\bin`.
+Same idea as the curl installers, but for Windows. Drops both binaries into `%CARGO_HOME%\bin`.
 
-## Scoop (Windows)
+## Scoop (Windows) — not yet available
 
-```powershell
-scoop bucket add maru https://github.com/itsgg/scoop-maru
-scoop install maru
-```
+The `itsgg/scoop-maru` bucket is reserved but no manifests are published yet. dist 0.31.0 doesn't auto-publish to Scoop on release; we'll add it once the bucket has manifests. Track at [docs/notes/phase-4-handoff.md](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md).
 
-The Scoop bucket is maintained per-release: the manifest is updated when a new tag ships. If `scoop install` reports a stale version, run `scoop update` first.
+Use the PowerShell installer above for now.
 
-## winget (Windows)
+## winget (Windows) — not yet available
 
-```powershell
-winget install itsgg.maru
-```
+dist 0.31.0 doesn't auto-submit to `microsoft/winget-pkgs`; submission requires a manual `wingetcreate` step per release. Track at [docs/notes/phase-4-handoff.md](https://github.com/itsgg/maru/blob/main/docs/notes/phase-4-handoff.md).
 
-The winget manifest is submitted to `microsoft/winget-pkgs` after each release; expect a small lag between a fresh tag and the manifest going live.
+Use the PowerShell installer above for now.
 
 ## Build from source
 
@@ -54,25 +56,23 @@ The winget manifest is submitted to `microsoft/winget-pkgs` after each release; 
 git clone https://github.com/itsgg/maru
 cd maru
 cargo build --release
+./target/release/maru install
 ```
 
-Two binaries land under `target/release/`:
+`cargo build --release` produces both binaries under `target/release/`:
 
 - **`maru`** — the manager binary you'll invoke directly (`maru profile create ...`, `maru doctor`, etc.).
 - **`maru-shim`** — the hot-path shim. Symlinks named `claude`/`codex`/`gemini` dispatch through this binary by reading `argv[0]`.
 
+When you run `./target/release/maru install`, `maru` finds `maru-shim` next to itself in `target/release/` automatically.
+
 > The toolchain pin in `rust-toolchain.toml` is the build toolchain; the workspace MSRV (`Cargo.toml [workspace.package].rust-version`) is `1.85` for end-user `cargo install`.
 
-## Install shims onto PATH
+## What `maru install` does
 
-```sh
-./target/release/maru install
-```
-
-This:
-
-1. Creates `$MARU_HOME/bin/` and symlinks `claude`, `codex`, `gemini` into it pointing at `maru-shim` (Unix). On Windows, writes `.cmd` shims and copies the shim binary under each harness name.
-2. Appends a managed block to your shell rc (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`). The PATH entry is platform-specific:
+1. Locates `maru-shim` (looks adjacent to the running `maru`, then on PATH).
+2. Creates `$MARU_HOME/bin/` and symlinks `claude`, `codex`, `gemini` into it pointing at `maru-shim` (Unix). On Windows, writes `.cmd` shims and copies the shim binary under each harness name.
+3. Appends a managed block to your shell rc (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`). The PATH entry is platform-specific:
 
    **macOS:**
 
@@ -93,11 +93,12 @@ This:
    **Windows:**
 
    ```powershell
-   # The installer writes %LOCALAPPDATA%\maru\bin onto the user PATH via the registry;
-   # there is no shell rc edit on Windows.
+   # PowerShell rc editing is not yet implemented; add %LOCALAPPDATA%\maru\bin
+   # to your PATH manually (System Properties → Environment Variables, or
+   # `setx PATH "%LOCALAPPDATA%\maru\bin;%PATH%"`).
    ```
 
-3. The block is delimited by sentinel comments. Re-running `maru install` rewrites the block in-place; it never duplicates and refuses to overwrite a block you've hand-edited inside the markers.
+4. The managed block is delimited by sentinel comments. Re-running `maru install` rewrites the block in-place; it never duplicates and refuses to overwrite a block you've hand-edited inside the markers.
 
 Reload your shell (or `source ~/.zshrc`) and verify:
 
@@ -123,7 +124,7 @@ maru uninstall            # removes shim dir + the managed block from your shell
 maru uninstall --purge    # also removes $MARU_HOME (state.toml, profiles, backups)
 ```
 
-`uninstall` without `--purge` preserves your profiles so you can re-`install` later without losing state.
+`uninstall` without `--purge` preserves your profiles so you can re-`install` later without losing state. Removing the `maru` and `maru-shim` binaries themselves is up to your package manager (`brew uninstall`, etc.).
 
 ## Skip the shell rc edit
 
@@ -135,6 +136,7 @@ You'll need to add `$MARU_HOME/bin` to PATH yourself.
 
 ## Troubleshooting
 
+- **`could not locate the maru-shim binary`** → you installed `maru` but not `maru-shim`. Install both packages (see the steps above) and re-run `maru install`.
 - **`maru: error: ...not found on PATH`** → run `maru doctor` to see what's missing.
 - **`brew install`-installed claude not picked up by the shim** → the shim's job is to BE `claude` on your PATH. After `maru install`, `which claude` should return `$MARU_HOME/bin/claude`. If it returns the brew path, your shell rc edit didn't take effect — open a new terminal.
 - **VS Code / Cursor extension still uses the old config** → expected. The Anthropic Claude VS Code extension and the Codex VS Code extension don't inherit env from your shell rc. See [`limitations.md`](limitations.md).

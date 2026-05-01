@@ -47,9 +47,9 @@ git push origin v0.1.0-alpha.0
 
 After the run:
 
-- The GitHub Release page should have one artifact per target (5 tarballs/zips + checksums).
-- `itsgg/homebrew-maru` should have a new commit `Formula/maru.rb`.
-- `brew install itsgg/maru/maru` should now work.
+- The GitHub Release page should have one artifact per target per binary (5 tarballs/zips × 2 binaries + checksums + installers + formulas).
+- `itsgg/homebrew-maru` should have new commits for `Formula/maru-cli.rb` and `Formula/maru-shim.rb`.
+- `brew install itsgg/maru/maru-cli itsgg/maru/maru-shim && maru install` should now work end-to-end.
 
 ## What to expect from `dist init`
 

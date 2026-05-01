@@ -21,39 +21,25 @@ Phases 0–4 are merged on `main`. Pre-1.0 alpha; the first `v0.1.0-alpha.0` tag
 
 ## Install
 
-Until the first release is tagged, build from source — that's the only path that works today.
-
-### Build from source
-
-Requires Rust 1.95.0 (see `rust-toolchain.toml`).
-
 ```sh
-git clone https://github.com/itsgg/maru
-cd maru
-cargo build --release
-./target/release/maru install
-```
-
-### After v0.1.0 release (placeholders)
-
-The one-liners below go live once the maintainer creates the Homebrew tap (`itsgg/homebrew-maru`) and tags `v0.1.0-alpha.0`. They will not work before then.
-
-```sh
-# macOS / Linux Homebrew (after first release)
+# macOS / Linux (Homebrew)
 brew install itsgg/maru/maru
 
-# Windows Scoop
+# macOS / Linux (curl)
+curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.sh | sh
+
+# Windows (PowerShell)
+iwr https://github.com/itsgg/maru/releases/latest/download/maru-installer.ps1 | iex
+
+# Windows (Scoop)
 scoop bucket add maru https://github.com/itsgg/scoop-maru
 scoop install maru
 
-# Windows winget
+# Windows (winget)
 winget install itsgg.maru
-
-# curl one-liner (Unix)
-curl -sSL https://github.com/itsgg/maru/releases/latest/download/maru-installer.sh | sh
 ```
 
-After install, run `maru install` once to wire the shim symlinks into your shell's PATH.
+After install, run `maru install` once to wire the shim symlinks into your shell's PATH. Full instructions and a from-source path are in [`docs/book/src/install.md`](docs/book/src/install.md).
 
 ## Project structure
 
